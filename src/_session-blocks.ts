@@ -36,7 +36,7 @@ export type LoadedUsageEntry = {
 /**
  * Aggregated token counts for different token types
  */
-type TokenCounts = {
+export type TokenCounts = {
 	inputTokens: number;
 	outputTokens: number;
 	cacheCreationInputTokens: number;

@@ -6,6 +6,7 @@
  * Provides frame rate limiting, display rendering, and layout functions.
  */
 
+import type { CombinedTokenData } from './_server-client.ts';
 import type { SessionBlock } from './_session-blocks.ts';
 import type { TerminalManager } from './_terminal-utils.ts';
 import type { CostMode, SortOrder } from './_types.ts';
@@ -57,12 +58,12 @@ export async function renderWaitingState(terminal: TerminalManager, config: Live
  * Displays the live monitoring dashboard for active Claude session
  * Uses buffering and sync mode to prevent screen flickering
  */
-export function renderActiveBlock(terminal: TerminalManager, activeBlock: SessionBlock, config: LiveMonitoringConfig): void {
+export function renderActiveBlock(terminal: TerminalManager, activeBlock: SessionBlock, config: LiveMonitoringConfig, combinedData: CombinedTokenData | null): void {
 	// Use buffering + sync mode for smooth, flicker-free updates
 	terminal.startBuffering();
 	terminal.write(ansiEscapes.cursorTo(0, 0)); // Move to home position
 	terminal.write(ansiEscapes.eraseDown); // Clear screen content
-	renderLiveDisplay(terminal, activeBlock, config);
+	renderLiveDisplay(terminal, activeBlock, config, combinedData);
 	terminal.write(ansiEscapes.cursorHide); // Ensure cursor stays hidden
 	terminal.flush(); // Send all updates atomically
 }
@@ -88,18 +89,24 @@ const DETAIL_COLUMN_WIDTHS = {
 /**
  * Renders the live display for an active session block
  */
-export function renderLiveDisplay(terminal: TerminalManager, block: SessionBlock, config: LiveMonitoringConfig): void {
+export function renderLiveDisplay(terminal: TerminalManager, block: SessionBlock, config: LiveMonitoringConfig, combinedData: CombinedTokenData | null): void {
 	const width = terminal.width;
 	const now = new Date();
 
-	// Calculate key metrics
-	const totalTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens;
+	// Calculate key metrics - use combined data if available
+	const localTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens;
+	const totalTokens = combinedData != null
+		? combinedData.totalTokens.inputTokens + combinedData.totalTokens.outputTokens
+		: localTokens;
+	const remoteTokens = totalTokens - localTokens;
+	const remoteHostCount = combinedData?.remoteHostCount ?? 0;
+
 	const elapsed = (now.getTime() - block.startTime.getTime()) / (1000 * 60);
 	const remaining = (block.endTime.getTime() - now.getTime()) / (1000 * 60);
 
 	// Use compact mode for narrow terminals
 	if (width < 60) {
-		renderCompactLiveDisplay(terminal, block, config, totalTokens, elapsed, remaining);
+		renderCompactLiveDisplay(terminal, block, config, totalTokens, elapsed, remaining, combinedData);
 		return;
 	}
 
@@ -213,14 +220,20 @@ export function renderLiveDisplay(terminal: TerminalManager, block: SessionBlock
 	const { usageBarStr, usageCol1, usageCol2, usageCol3 } = config.tokenLimit != null && config.tokenLimit > 0
 		? {
 				usageBarStr: `${usageLabel}${''.padEnd(Math.max(0, labelWidth - usageLabelWidth))} ${usageBar} ${tokenPercent.toFixed(1).padStart(6)}% (${formatTokensShort(totalTokens)}/${formatTokensShort(config.tokenLimit)})`,
-				usageCol1: `${pc.gray('Tokens:')} ${formatNumber(totalTokens)} (${rateDisplay})`,
+				usageCol1: remoteHostCount > 0
+					? `${pc.gray('Local:')} ${formatNumber(localTokens)} ${pc.gray('Remote:')} ${formatNumber(remoteTokens)} (${remoteHostCount} host${remoteHostCount > 1 ? 's' : ''})`
+					: `${pc.gray('Tokens:')} ${formatNumber(totalTokens)} (${rateDisplay})`,
 				usageCol2: `${pc.gray('Limit:')} ${formatNumber(config.tokenLimit)} tokens`,
-				usageCol3: `${pc.gray('Cost:')} ${formatCurrency(block.costUSD)}`,
+				usageCol3: remoteHostCount > 0
+					? `${pc.gray('Total:')} ${formatNumber(totalTokens)} ${pc.gray('Cost:')} ${formatCurrency(block.costUSD)}`
+					: `${pc.gray('Cost:')} ${formatCurrency(block.costUSD)}`,
 			}
 		: {
 				usageBarStr: `${usageLabel}${''.padEnd(Math.max(0, labelWidth - usageLabelWidth))} ${usageBar} (${formatTokensShort(totalTokens)} tokens)`,
-				usageCol1: `${pc.gray('Tokens:')} ${formatNumber(totalTokens)} (${rateDisplay})`,
-				usageCol2: '',
+				usageCol1: remoteHostCount > 0
+					? `${pc.gray('Local:')} ${formatNumber(localTokens)} ${pc.gray('Remote:')} ${formatNumber(remoteTokens)} (${remoteHostCount} host${remoteHostCount > 1 ? 's' : ''})`
+					: `${pc.gray('Tokens:')} ${formatNumber(totalTokens)} (${rateDisplay})`,
+				usageCol2: remoteHostCount > 0 ? `${pc.gray('Total:')} ${formatNumber(totalTokens)}` : '',
 				usageCol3: `${pc.gray('Cost:')} ${formatCurrency(block.costUSD)}`,
 			};
 
@@ -351,6 +364,7 @@ export function renderCompactLiveDisplay(
 	totalTokens: number,
 	elapsed: number,
 	remaining: number,
+	combinedData: CombinedTokenData | null,
 ): void {
 	const width = terminal.width;
 
@@ -363,13 +377,24 @@ export function renderCompactLiveDisplay(
 	terminal.write(`Session: ${sessionPercent.toFixed(1)}% (${Math.floor(elapsed / 60)}h ${Math.floor(elapsed % 60)}m)\n`);
 
 	// Token usage
-	if (config.tokenLimit != null && config.tokenLimit > 0) {
-		const tokenPercent = (totalTokens / config.tokenLimit) * 100;
-		const status = tokenPercent > 100 ? pc.red('OVER') : tokenPercent > 80 ? pc.yellow('WARN') : pc.green('OK');
-		terminal.write(`Tokens: ${formatNumber(totalTokens)}/${formatNumber(config.tokenLimit)} ${status}\n`);
+	const localTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens;
+	const remoteTokens = totalTokens - localTokens;
+	const remoteHostCount = combinedData?.remoteHostCount ?? 0;
+
+	if (remoteHostCount > 0) {
+		terminal.write(`Local: ${formatNumber(localTokens)}\n`);
+		terminal.write(`Remote: ${formatNumber(remoteTokens)} (${remoteHostCount} host${remoteHostCount > 1 ? 's' : ''})\n`);
+		terminal.write(`Total: ${formatNumber(totalTokens)}\n`);
 	}
 	else {
-		terminal.write(`Tokens: ${formatNumber(totalTokens)}\n`);
+		if (config.tokenLimit != null && config.tokenLimit > 0) {
+			const tokenPercent = (totalTokens / config.tokenLimit) * 100;
+			const status = tokenPercent > 100 ? pc.red('OVER') : tokenPercent > 80 ? pc.yellow('WARN') : pc.green('OK');
+			terminal.write(`Tokens: ${formatNumber(totalTokens)}/${formatNumber(config.tokenLimit)} ${status}\n`);
+		}
+		else {
+			terminal.write(`Tokens: ${formatNumber(totalTokens)}\n`);
+		}
 	}
 
 	// Cost

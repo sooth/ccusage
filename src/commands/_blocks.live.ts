@@ -16,6 +16,7 @@ import {
 	renderActiveBlock,
 	renderWaitingState,
 } from '../_live-rendering.ts';
+import { ServerSubmissionManager } from '../_server-client.ts';
 import { TerminalManager } from '../_terminal-utils.ts';
 import { logger } from '../logger.ts';
 
@@ -23,6 +24,10 @@ export async function startLiveMonitoring(config: LiveMonitoringConfig): Promise
 	const terminal = new TerminalManager();
 	const abortController = new AbortController();
 	let lastRenderTime = 0;
+
+	// Create server submission manager
+	using submissionManager = new ServerSubmissionManager();
+	submissionManager.start();
 
 	// Setup graceful shutdown
 	const cleanup = (): void => {
@@ -72,8 +77,14 @@ export async function startLiveMonitoring(config: LiveMonitoringConfig): Promise
 				continue;
 			}
 
-			// Render active block
-			renderActiveBlock(terminal, activeBlock, config);
+			// Update server with latest token data
+			submissionManager.updateTokens(activeBlock.tokenCounts);
+
+			// Get combined data (local + remote)
+			const combinedData = submissionManager.getCombinedData();
+
+			// Render active block with combined data
+			renderActiveBlock(terminal, activeBlock, config, combinedData);
 			lastRenderTime = Date.now();
 
 			// Wait before next refresh

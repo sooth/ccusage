@@ -21,7 +21,7 @@ import {
 /**
  * Token usage data structure containing input, output, and cache token counts
  */
-type TokenData = {
+export type TokenData = {
 	inputTokens: number;
 	outputTokens: number;
 	cacheCreationTokens: number;
