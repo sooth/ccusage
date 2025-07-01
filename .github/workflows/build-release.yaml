@@ -1,0 +1,95 @@
+name: Build Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+            name: ccusage-linux-x64
+          - os: macos-latest
+            target: darwin-x64
+            name: ccusage-macos-x64
+          - os: macos-latest
+            target: darwin-arm64
+            name: ccusage-macos-arm64
+          - os: windows-latest
+            target: win32-x64
+            name: ccusage-windows-x64.exe
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+          
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        
+      - name: Build project
+        run: bun run build
+        
+      - name: Create standalone binary
+        run: |
+          bun build ./dist/index.js \
+            --compile \
+            --target=bun-${{ matrix.target }} \
+            --outfile=${{ matrix.name }}
+            
+      - name: Test binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x ./${{ matrix.name }}
+          ./${{ matrix.name }} --version
+          
+      - name: Test binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          ./${{ matrix.name }} --version
+          
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}
+          
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ccusage-linux-x64/ccusage-linux-x64
+            ccusage-macos-x64/ccusage-macos-x64
+            ccusage-macos-arm64/ccusage-macos-arm64
+            ccusage-windows-x64.exe/ccusage-windows-x64.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false
