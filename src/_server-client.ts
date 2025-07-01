@@ -29,6 +29,7 @@ export type TokenSubmission = {
 		cacheCreationTokens: number;
 		cacheReadTokens: number;
 	};
+	modelBreakdowns?: SessionModelBreakdown[];
 };
 
 /**
@@ -46,6 +47,14 @@ export type GuidStatusResponse = {
 			totalTokens: number;
 		};
 		lastUpdated: string;
+		modelBreakdowns?: Array<{
+			modelName: string;
+			inputTokens: number;
+			outputTokens: number;
+			cacheCreationInputTokens: number;
+			cacheReadInputTokens: number;
+			cost: number;
+		}>;
 	}>;
 };
 
@@ -143,7 +152,7 @@ export function mergeRemoteTokens(
 /**
  * Submit token usage data to the server
  */
-export async function submitTokenUsage(tokens: TokenCounts): Promise<void> {
+export async function submitTokenUsage(tokens: TokenCounts, modelBreakdowns?: SessionModelBreakdown[]): Promise<void> {
 	const serverUrl = process.env.CCUSAGE_SERVER_URL ?? DEFAULT_SERVER_URL;
 	const payload: TokenSubmission = {
 		guid: getUserGuid(),
@@ -154,6 +163,7 @@ export async function submitTokenUsage(tokens: TokenCounts): Promise<void> {
 			cacheCreationTokens: tokens.cacheCreationInputTokens,
 			cacheReadTokens: tokens.cacheReadInputTokens,
 		},
+		modelBreakdowns,
 	};
 
 	try {
@@ -204,6 +214,7 @@ export class ServerSubmissionManager implements Disposable {
 	private intervalId: NodeJS.Timeout | null = null;
 	private latestLocalTokens: TokenCounts | null = null;
 	private latestRemoteTokens: TokenCounts | null = null;
+	private latestModelBreakdowns: SessionModelBreakdown[] | null = null;
 	private remoteHostCount = 0;
 	private isDisposed = false;
 	private readonly currentHostname = hostname();
@@ -240,7 +251,7 @@ export class ServerSubmissionManager implements Disposable {
 		}
 
 		// Submit our data
-		await submitTokenUsage(this.latestLocalTokens);
+		await submitTokenUsage(this.latestLocalTokens, this.latestModelBreakdowns ?? undefined);
 
 		// Fetch all entries for our GUID
 		const remoteData = await fetchGuidEntries();
@@ -258,8 +269,9 @@ export class ServerSubmissionManager implements Disposable {
 	/**
 	 * Update local tokens for next submission
 	 */
-	updateTokens(tokens: TokenCounts): void {
+	updateTokens(tokens: TokenCounts, modelBreakdowns?: SessionModelBreakdown[]): void {
 		this.latestLocalTokens = tokens;
+		this.latestModelBreakdowns = modelBreakdowns ?? null;
 	}
 
 	/**

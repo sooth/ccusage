@@ -3,22 +3,26 @@
 ## Workflows
 
 ### 1. CI (`ci.yaml`)
+
 - Runs on every push and pull request
 - Executes linting, type checking, and tests
 - Ensures code quality
 
 ### 2. NPM Publish (`release.yaml`)
+
 - Triggered when a tag is pushed
 - Publishes the package to npm
 - Creates a GitHub release with changelog
 
 ### 3. Build Binaries (`build-binaries.yaml`)
+
 - Runs on main branch pushes and PRs
 - Builds standalone executables for all platforms
 - Useful for testing binary compilation
 - Artifacts available for 7 days
 
 ### 4. Build Release (`build-release.yaml`)
+
 - Triggered by version tags (e.g., `v1.0.0`)
 - Builds binaries for all platforms:
   - Linux x64
@@ -44,6 +48,7 @@
 ## Manual Binary Build
 
 You can also trigger a manual build:
+
 1. Go to Actions tab
 2. Select "Build Binaries" workflow
 3. Click "Run workflow"

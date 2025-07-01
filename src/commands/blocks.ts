@@ -11,7 +11,7 @@ import {
 
 } from '../_session-blocks.ts';
 import { sharedCommandConfig } from '../_shared-args.ts';
-import { formatCurrency, formatModelsDisplayMultiline, formatNumber, ResponsiveTable } from '../_utils.ts';
+import { formatCurrency, formatModelsDisplayMultiline, formatNumber, pushBreakdownRows, ResponsiveTable } from '../_utils.ts';
 import { getClaudePaths, loadSessionBlockData } from '../data-loader.ts';
 import { log, logger } from '../logger.ts';
 import { startLiveMonitoring } from './_blocks.live.ts';
@@ -270,6 +270,7 @@ export const blocksCommand = define({
 							+ block.tokenCounts.outputTokens,
 						costUSD: block.costUSD,
 						models: block.models,
+						modelBreakdowns: block.modelBreakdowns,
 						burnRate,
 						projection,
 						tokenLimitStatus: projection != null && ctx.values.tokenLimit != null
@@ -322,6 +323,21 @@ export const blocksCommand = define({
 				log(`  Input Tokens:     ${formatNumber(block.tokenCounts.inputTokens)}`);
 				log(`  Output Tokens:    ${formatNumber(block.tokenCounts.outputTokens)}`);
 				log(`  Total Cost:       ${formatCurrency(block.costUSD)}\n`);
+
+				// Show model breakdown if flag is set
+				if (ctx.values.breakdown && block.modelBreakdowns.length > 0) {
+					log(pc.bold('Model Breakdown:'));
+					for (const mb of block.modelBreakdowns) {
+						const totalTokens = mb.inputTokens + mb.outputTokens;
+						log(`  ${mb.modelName}:`);
+						log(`    Tokens: ${formatNumber(totalTokens)} (${formatNumber(mb.inputTokens)} in, ${formatNumber(mb.outputTokens)} out)`);
+						if (mb.cacheCreationInputTokens > 0 || mb.cacheReadInputTokens > 0) {
+							log(`    Cache: ${formatNumber(mb.cacheCreationInputTokens)} create, ${formatNumber(mb.cacheReadInputTokens)} read`);
+						}
+						log(`    Cost: ${formatCurrency(mb.cost)}`);
+					}
+					log('');
+				}
 
 				if (burnRate != null) {
 					log(pc.bold('Burn Rate:'));
@@ -421,6 +437,20 @@ export const blocksCommand = define({
 
 						row.push(formatCurrency(block.costUSD));
 						table.push(row);
+
+						// Add model breakdown rows if flag is set
+						if (ctx.values.breakdown && block.modelBreakdowns.length > 0) {
+							// Convert SessionModelBreakdown to ModelBreakdown format for pushBreakdownRows
+							const modelBreakdowns = block.modelBreakdowns.map(mb => ({
+								modelName: mb.modelName,
+								inputTokens: mb.inputTokens,
+								outputTokens: mb.outputTokens,
+								cacheCreationTokens: mb.cacheCreationInputTokens,
+								cacheReadTokens: mb.cacheReadInputTokens,
+								cost: mb.cost,
+							}));
+							pushBreakdownRows(table, modelBreakdowns);
+						}
 
 						// Add REMAINING and PROJECTED rows for active blocks
 						if (block.isActive) {

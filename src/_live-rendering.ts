@@ -347,6 +347,26 @@ export function renderLiveDisplay(terminal: TerminalManager, block: SessionBlock
 		terminal.write(`${marginStr}│ ${modelsLinePadded}│\n`);
 	}
 
+	// Model breakdown section
+	if (block.modelBreakdowns.length > 0) {
+		terminal.write(`${marginStr}│${' '.repeat(boxWidth - 2)}│\n`);
+		terminal.write(`${marginStr}│   ${pc.bold('Model Breakdown:')}${' '.repeat(boxWidth - 21)}│\n`);
+
+		for (const mb of block.modelBreakdowns) {
+			const totalTokens = mb.inputTokens + mb.outputTokens;
+			const modelLine = `   ${mb.modelName}: ${formatNumber(totalTokens)} tokens (${formatCurrency(mb.cost)})`;
+			const modelLinePadded = modelLine + ' '.repeat(Math.max(0, boxWidth - 3 - stringWidth(modelLine)));
+			terminal.write(`${marginStr}│ ${modelLinePadded}│\n`);
+
+			// Show cache tokens if present
+			if (mb.cacheCreationInputTokens > 0 || mb.cacheReadInputTokens > 0) {
+				const cacheLine = `      ${pc.gray('Cache:')} ${formatNumber(mb.cacheCreationInputTokens)} create, ${formatNumber(mb.cacheReadInputTokens)} read`;
+				const cacheLinePadded = cacheLine + ' '.repeat(Math.max(0, boxWidth - 3 - stringWidth(cacheLine)));
+				terminal.write(`${marginStr}│ ${cacheLinePadded}│\n`);
+			}
+		}
+	}
+
 	// Footer
 	terminal.write(`${marginStr}├${'─'.repeat(boxWidth - 2)}┤\n`);
 	const refreshText = `↻ Refreshing every ${config.refreshInterval / 1000}s  •  Press Ctrl+C to stop`;
@@ -404,6 +424,15 @@ export function renderCompactLiveDisplay(
 	const burnRate = calculateBurnRate(block);
 	if (burnRate != null) {
 		terminal.write(`Rate: ${formatNumber(burnRate.tokensPerMinute)}/min\n`);
+	}
+
+	// Model breakdown (compact)
+	if (block.modelBreakdowns.length > 0) {
+		terminal.write(`${'─'.repeat(width)}\n`);
+		for (const mb of block.modelBreakdowns) {
+			const totalTokens = mb.inputTokens + mb.outputTokens;
+			terminal.write(`${mb.modelName}: ${formatNumber(totalTokens)}t\n`);
+		}
 	}
 
 	// Footer

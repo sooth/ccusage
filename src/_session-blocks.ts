@@ -44,6 +44,18 @@ export type TokenCounts = {
 };
 
 /**
+ * Model breakdown for a session block
+ */
+export type SessionModelBreakdown = {
+	modelName: string;
+	inputTokens: number;
+	outputTokens: number;
+	cacheCreationInputTokens: number;
+	cacheReadInputTokens: number;
+	cost: number;
+};
+
+/**
  * Represents a session block (typically 5-hour billing period) with usage data
  */
 export type SessionBlock = {
@@ -57,6 +69,7 @@ export type SessionBlock = {
 	tokenCounts: TokenCounts;
 	costUSD: number;
 	models: string[];
+	modelBreakdowns: SessionModelBreakdown[];
 };
 
 /**
@@ -174,6 +187,9 @@ function createBlock(startTime: Date, entries: LoadedUsageEntry[], now: Date, se
 	let costUSD = 0;
 	const models: string[] = [];
 
+	// Track per-model stats
+	const modelStats = new Map<string, SessionModelBreakdown>();
+
 	for (const entry of entries) {
 		tokenCounts.inputTokens += entry.usage.inputTokens;
 		tokenCounts.outputTokens += entry.usage.outputTokens;
@@ -181,6 +197,25 @@ function createBlock(startTime: Date, entries: LoadedUsageEntry[], now: Date, se
 		tokenCounts.cacheReadInputTokens += entry.usage.cacheReadInputTokens;
 		costUSD += entry.costUSD ?? 0;
 		models.push(entry.model);
+
+		// Aggregate per-model stats
+		const existing = modelStats.get(entry.model) ?? {
+			modelName: entry.model,
+			inputTokens: 0,
+			outputTokens: 0,
+			cacheCreationInputTokens: 0,
+			cacheReadInputTokens: 0,
+			cost: 0,
+		};
+
+		modelStats.set(entry.model, {
+			modelName: entry.model,
+			inputTokens: existing.inputTokens + entry.usage.inputTokens,
+			outputTokens: existing.outputTokens + entry.usage.outputTokens,
+			cacheCreationInputTokens: existing.cacheCreationInputTokens + entry.usage.cacheCreationInputTokens,
+			cacheReadInputTokens: existing.cacheReadInputTokens + entry.usage.cacheReadInputTokens,
+			cost: existing.cost + (entry.costUSD ?? 0),
+		});
 	}
 
 	return {
@@ -193,6 +228,7 @@ function createBlock(startTime: Date, entries: LoadedUsageEntry[], now: Date, se
 		tokenCounts,
 		costUSD,
 		models: uniq(models),
+		modelBreakdowns: Array.from(modelStats.values()),
 	};
 }
 
@@ -228,6 +264,7 @@ function createGapBlock(lastActivityTime: Date, nextActivityTime: Date, sessionD
 		},
 		costUSD: 0,
 		models: [],
+		modelBreakdowns: [],
 	};
 }
 
@@ -492,6 +529,7 @@ if (import.meta.vitest != null) {
 				},
 				costUSD: 0,
 				models: [],
+				modelBreakdowns: [],
 			};
 
 			const result = calculateBurnRate(block);
@@ -514,6 +552,7 @@ if (import.meta.vitest != null) {
 				},
 				costUSD: 0,
 				models: [],
+				modelBreakdowns: [],
 			};
 
 			const result = calculateBurnRate(block);
@@ -539,6 +578,7 @@ if (import.meta.vitest != null) {
 				},
 				costUSD: 0.02,
 				models: ['claude-sonnet-4-20250514'],
+				modelBreakdowns: [],
 			};
 
 			const result = calculateBurnRate(block);
@@ -565,6 +605,7 @@ if (import.meta.vitest != null) {
 				},
 				costUSD: 0.03,
 				models: ['claude-sonnet-4-20250514'],
+				modelBreakdowns: [],
 			};
 
 			const result = calculateBurnRate(block);
@@ -590,6 +631,7 @@ if (import.meta.vitest != null) {
 				},
 				costUSD: 0.01,
 				models: [],
+				modelBreakdowns: [],
 			};
 
 			const result = projectBlockUsage(block);
@@ -612,6 +654,7 @@ if (import.meta.vitest != null) {
 				},
 				costUSD: 0,
 				models: [],
+				modelBreakdowns: [],
 			};
 
 			const result = projectBlockUsage(block);
@@ -633,6 +676,7 @@ if (import.meta.vitest != null) {
 				},
 				costUSD: 0.01,
 				models: [],
+				modelBreakdowns: [],
 			};
 
 			const result = projectBlockUsage(block);
@@ -662,6 +706,7 @@ if (import.meta.vitest != null) {
 				},
 				costUSD: 0.03,
 				models: ['claude-sonnet-4-20250514'],
+				modelBreakdowns: [],
 			};
 
 			const result = projectBlockUsage(block);
@@ -693,6 +738,7 @@ if (import.meta.vitest != null) {
 					},
 					costUSD: 0.01,
 					models: [],
+					modelBreakdowns: [],
 				},
 				{
 					id: oldTime.toISOString(),
@@ -708,6 +754,7 @@ if (import.meta.vitest != null) {
 					},
 					costUSD: 0.02,
 					models: [],
+					modelBreakdowns: [],
 				},
 			];
 
@@ -735,6 +782,7 @@ if (import.meta.vitest != null) {
 					},
 					costUSD: 0.01,
 					models: [],
+					modelBreakdowns: [],
 				},
 			];
 
@@ -763,6 +811,7 @@ if (import.meta.vitest != null) {
 					},
 					costUSD: 0.01,
 					models: [],
+					modelBreakdowns: [],
 				},
 				{
 					id: outsideCustomRange.toISOString(),
@@ -778,6 +827,7 @@ if (import.meta.vitest != null) {
 					},
 					costUSD: 0.02,
 					models: [],
+					modelBreakdowns: [],
 				},
 			];
 
@@ -805,6 +855,7 @@ if (import.meta.vitest != null) {
 					},
 					costUSD: 0.01,
 					models: [],
+					modelBreakdowns: [],
 				},
 			];
 

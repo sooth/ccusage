@@ -78,7 +78,7 @@ export async function startLiveMonitoring(config: LiveMonitoringConfig): Promise
 			}
 
 			// Update server with latest token data
-			submissionManager.updateTokens(activeBlock.tokenCounts);
+			submissionManager.updateTokens(activeBlock.tokenCounts, activeBlock.modelBreakdowns);
 
 			// Get combined data (local + remote)
 			const combinedData = submissionManager.getCombinedData();

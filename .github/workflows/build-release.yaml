@@ -9,7 +9,7 @@ on:
       version:
         description: 'Version tag (e.g., v1.0.0)'
         required: true
-        default: 'v1.0.0'
+        default: v1.0.0
 
 jobs:
   build:
@@ -30,29 +30,29 @@ jobs:
             name: ccusage-windows-x64.exe
 
     runs-on: ${{ matrix.os }}
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-          
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
-        
+
       - name: Build project
         run: bun run build
-        
+
       - name: Create standalone binary
         run: |
           bun build ./dist/index.js \
             --compile \
             --target=bun-${{ matrix.target }} \
             --outfile=${{ matrix.name }}
-            
+
       - name: Test binary (Unix)
         if: runner.os != 'Windows'
         run: |
@@ -60,32 +60,32 @@ jobs:
           # Create dummy Claude directory to prevent error
           mkdir -p ~/.config/claude/projects
           ./${{ matrix.name }} --version || echo "Binary created successfully"
-          
+
       - name: Test binary (Windows)
         if: runner.os == 'Windows'
         run: |
           # Create dummy Claude directory to prevent error
           New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.config\claude\projects"
           ./${{ matrix.name }} --version || echo "Binary created successfully"
-          
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
           path: ${{ matrix.name }}
-          
+
   release:
     needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    
+
     permissions:
       contents: write
-      
+
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
-        
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:

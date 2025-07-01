@@ -52,7 +52,7 @@ def update_usage():
         
         # Store/overwrite data for this hostname
         hostname = data['hostname']
-        usage_data[guid][hostname] = {
+        entry_data = {
             'hostname': hostname,
             'tokens': {
                 'inputTokens': int(tokens['inputTokens']),
@@ -63,6 +63,12 @@ def update_usage():
             },
             'lastUpdated': datetime.now(timezone.utc).isoformat()
         }
+        
+        # Add model breakdowns if provided
+        if 'modelBreakdowns' in data and data['modelBreakdowns']:
+            entry_data['modelBreakdowns'] = data['modelBreakdowns']
+        
+        usage_data[guid][hostname] = entry_data
         
         logging.info(f"Updated usage for {guid} from {hostname}")
         return jsonify({'status': 'success'}), 200
