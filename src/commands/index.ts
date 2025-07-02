@@ -1,6 +1,7 @@
 import process from 'node:process';
 import { cli } from 'gunshi';
 import { description, name, version } from '../../package.json';
+import { blocksMonitorCommand } from './blocks-monitor.ts';
 import { blocksCommand } from './blocks.ts';
 import { dailyCommand } from './daily.ts';
 import { mcpCommand } from './mcp.ts';
@@ -15,6 +16,7 @@ subCommands.set('daily', dailyCommand);
 subCommands.set('monthly', monthlyCommand);
 subCommands.set('session', sessionCommand);
 subCommands.set('blocks', blocksCommand);
+subCommands.set('blocks-monitor', blocksMonitorCommand);
 subCommands.set('mcp', mcpCommand);
 
 /**

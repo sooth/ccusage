@@ -23,7 +23,7 @@ import { formatCurrency, formatModelsDisplay, formatNumber } from './_utils.ts';
  * Live monitoring configuration
  */
 export type LiveMonitoringConfig = {
-	claudePath: string;
+	claudePaths: string[];
 	tokenLimit?: number;
 	refreshInterval: number;
 	sessionDurationHours: number;

@@ -51,7 +51,7 @@ export async function startLiveMonitoring(config: LiveMonitoringConfig): Promise
 
 	// Create live monitor with efficient data loading
 	using monitor = new LiveMonitor({
-		claudePath: config.claudePath,
+		claudePaths: config.claudePaths,
 		sessionDurationHours: config.sessionDurationHours,
 		mode: config.mode,
 		order: config.order,
@@ -77,8 +77,10 @@ export async function startLiveMonitoring(config: LiveMonitoringConfig): Promise
 				continue;
 			}
 
-			// Update server with latest token data
-			submissionManager.updateTokens(activeBlock.tokenCounts, activeBlock.modelBreakdowns);
+			// Update server with project-level token data
+			const { extractProjectDataFromSessionBlock } = await import('../_server-client.ts');
+			const projectData = extractProjectDataFromSessionBlock(activeBlock);
+			submissionManager.updateProjectData(projectData);
 
 			// Get combined data (local + remote)
 			const combinedData = submissionManager.getCombinedData();

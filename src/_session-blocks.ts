@@ -31,6 +31,7 @@ export type LoadedUsageEntry = {
 	costUSD: number | null;
 	model: string;
 	version?: string;
+	projectPath?: string;
 };
 
 /**
@@ -70,6 +71,7 @@ export type SessionBlock = {
 	costUSD: number;
 	models: string[];
 	modelBreakdowns: SessionModelBreakdown[];
+	projects?: string[]; // Unique project paths in this block
 };
 
 /**
@@ -186,6 +188,7 @@ function createBlock(startTime: Date, entries: LoadedUsageEntry[], now: Date, se
 
 	let costUSD = 0;
 	const models: string[] = [];
+	const projects: string[] = [];
 
 	// Track per-model stats
 	const modelStats = new Map<string, SessionModelBreakdown>();
@@ -197,6 +200,11 @@ function createBlock(startTime: Date, entries: LoadedUsageEntry[], now: Date, se
 		tokenCounts.cacheReadInputTokens += entry.usage.cacheReadInputTokens;
 		costUSD += entry.costUSD ?? 0;
 		models.push(entry.model);
+		
+		// Track project
+		if (entry.projectPath != null) {
+			projects.push(entry.projectPath);
+		}
 
 		// Aggregate per-model stats
 		const existing = modelStats.get(entry.model) ?? {
@@ -229,6 +237,7 @@ function createBlock(startTime: Date, entries: LoadedUsageEntry[], now: Date, se
 		costUSD,
 		models: uniq(models),
 		modelBreakdowns: Array.from(modelStats.values()),
+		projects: uniq(projects),
 	};
 }
 

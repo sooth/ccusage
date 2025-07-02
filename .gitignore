@@ -36,3 +36,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .claude
 
 .eslintcache
+
+# Deployment configuration (contains sensitive data)
+deploy_config.py

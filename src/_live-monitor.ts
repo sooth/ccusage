@@ -28,7 +28,7 @@ import { PricingFetcher } from './pricing-fetcher.ts';
  * Configuration for live monitoring
  */
 export type LiveMonitorConfig = {
-	claudePath: string;
+	claudePaths: string[];
 	sessionDurationHours: number;
 	mode: CostMode;
 	order: SortOrder;
@@ -64,19 +64,28 @@ export class LiveMonitor implements Disposable {
 	 * Only reads new or modified files since last check
 	 */
 	async getActiveBlock(): Promise<SessionBlock | null> {
-		const claudeDir = path.join(this.config.claudePath, CLAUDE_PROJECTS_DIR_NAME);
-		const files = await glob([USAGE_DATA_GLOB_PATTERN], {
-			cwd: claudeDir,
-			absolute: true,
-		});
+		// Collect files from all Claude directories with their base directories
+		const filesWithBaseDirs: Array<{ file: string; baseDir: string }> = [];
+		for (const claudePath of this.config.claudePaths) {
+			const claudeDir = path.join(claudePath, CLAUDE_PROJECTS_DIR_NAME);
+			const files = await glob([USAGE_DATA_GLOB_PATTERN], {
+				cwd: claudeDir,
+				absolute: true,
+			});
+			for (const file of files) {
+				filesWithBaseDirs.push({ file, baseDir: claudeDir });
+			}
+		}
 
-		if (files.length === 0) {
+		const allFiles = filesWithBaseDirs.map(item => item.file);
+
+		if (allFiles.length === 0) {
 			return null;
 		}
 
 		// Check for new or modified files
 		const filesToRead: string[] = [];
-		for (const file of files) {
+		for (const file of allFiles) {
 			const timestamp = await getEarliestTimestamp(file);
 			const lastTimestamp = this.lastFileTimestamps.get(file);
 
@@ -91,6 +100,16 @@ export class LiveMonitor implements Disposable {
 			const sortedFiles = await sortFilesByTimestamp(filesToRead);
 
 			for (const file of sortedFiles) {
+				// Find the base directory for this file
+				const fileInfo = filesWithBaseDirs.find(item => item.file === file);
+				const baseDir = fileInfo?.baseDir ?? '';
+				
+				// Extract project path from file path
+				const relativePath = path.relative(baseDir, file);
+				const parts = relativePath.split(path.sep);
+				// Project name is the first directory in the path
+				const projectPath = parts.length > 0 ? parts[0] : 'Unknown Project';
+
 				const content = await readFile(file, 'utf-8')
 					.catch(() => {
 						// Skip files that can't be read
@@ -141,6 +160,7 @@ export class LiveMonitor implements Disposable {
 							costUSD,
 							model: data.message.model ?? '<synthetic>',
 							version: data.version,
+							projectPath,
 						});
 					}
 					catch {
@@ -204,7 +224,7 @@ if (import.meta.vitest != null) {
 			tempDir = fixture.path;
 
 			monitor = new LiveMonitor({
-				claudePath: tempDir,
+				claudePaths: [tempDir],
 				sessionDurationHours: 5,
 				mode: 'display',
 				order: 'desc',
@@ -243,7 +263,7 @@ if (import.meta.vitest != null) {
 			const emptyFixture = await createFixture({});
 
 			const emptyMonitor = new LiveMonitor({
-				claudePath: emptyFixture.path,
+				claudePaths: [emptyFixture.path],
 				sessionDurationHours: 5,
 				mode: 'display',
 				order: 'desc',
