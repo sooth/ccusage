@@ -23,9 +23,6 @@ jobs:
           - os: macos-latest
             target: darwin-arm64
             name: ccusage-macos-arm64
-          - os: windows-latest
-            target: win32-x64
-            name: ccusage-windows-x64.exe
 
     runs-on: ${{ matrix.os }}
 
@@ -57,27 +54,13 @@ jobs:
 
       - name: Verify binary size
         run: |
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            echo "Binary size: $(((Get-Item ${{ matrix.name }}).length / 1MB)) MB"
-          else
-            echo "Binary size: $(du -h ${{ matrix.name }} | cut -f1)"
-          fi
-        shell: bash
+          echo "Binary size: $(du -h ${{ matrix.name }} | cut -f1)"
 
-      - name: Test binary (Unix)
-        if: runner.os != 'Windows'
+      - name: Test binary
         run: |
           chmod +x ./${{ matrix.name }}
           # Create dummy Claude directory to prevent error
           mkdir -p ~/.config/claude/projects
-          ./${{ matrix.name }} --version || echo "Binary created successfully"
-          ./${{ matrix.name }} --help || true
-
-      - name: Test binary (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          # Create dummy Claude directory to prevent error
-          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.config\claude\projects"
           ./${{ matrix.name }} --version || echo "Binary created successfully"
           ./${{ matrix.name }} --help || true
 
