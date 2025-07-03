@@ -78,6 +78,11 @@ export const sharedArgs = {
 		description: 'Use cached pricing data for Claude models instead of fetching from API',
 		default: false,
 	},
+	server: {
+		type: 'boolean',
+		description: 'Fetch usage data from server instead of local files',
+		default: false,
+	},
 } as const satisfies Args;
 
 /**

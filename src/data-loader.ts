@@ -28,6 +28,7 @@ import { isDirectorySync } from 'path-type';
 import { glob } from 'tinyglobby';
 import { z } from 'zod';
 import { CLAUDE_CONFIG_DIR_ENV, CLAUDE_PROJECTS_DIR_NAME, DEFAULT_CLAUDE_CODE_PATH, DEFAULT_CLAUDE_CONFIG_PATH, USAGE_DATA_GLOB_PATTERN, USER_HOME_DIR } from './_consts.ts';
+import { fetchDailyUsage, fetchMonthlyUsage } from './_server-client.ts';
 import {
 	identifySessionBlocks,
 
@@ -610,6 +611,7 @@ export type LoadOptions = {
 	order?: SortOrder; // Sort order for dates
 	offline?: boolean; // Use offline mode for pricing
 	sessionDurationHours?: number; // Session block duration in hours
+	useServer?: boolean; // Fetch data from server instead of local files
 } & DateFilter;
 
 /**
@@ -621,6 +623,37 @@ export type LoadOptions = {
 export async function loadDailyUsageData(
 	options?: LoadOptions,
 ): Promise<DailyUsage[]> {
+	// If useServer is true, fetch from server instead of local files
+	if (options?.useServer === true) {
+		const serverData = await fetchDailyUsage(options?.since, options?.until);
+		if (serverData == null) {
+			logger.debug('No server data available for daily usage');
+			return [];
+		}
+
+		// Convert server data to our DailyUsage format
+		const dailyUsages: DailyUsage[] = serverData.daily.map(day => ({
+			date: createDailyDate(day.date),
+			inputTokens: day.inputTokens,
+			outputTokens: day.outputTokens,
+			cacheCreationTokens: day.cacheCreationTokens,
+			cacheReadTokens: day.cacheReadTokens,
+			totalCost: day.cost,
+			modelsUsed: day.modelBreakdowns.map(mb => createModelName(mb.modelName)),
+			modelBreakdowns: day.modelBreakdowns.map(mb => ({
+				modelName: createModelName(mb.modelName),
+				inputTokens: mb.inputTokens,
+				outputTokens: mb.outputTokens,
+				cacheCreationTokens: mb.cacheCreationInputTokens,
+				cacheReadTokens: mb.cacheReadInputTokens,
+				cost: mb.cost,
+			})),
+		}));
+
+		// Sort by date based on order option (default to descending)
+		return sortByDate(dailyUsages, item => item.date, options?.order);
+	}
+
 	// Get all Claude paths or use the specific one from options
 	const claudePaths = toArray(options?.claudePath ?? getClaudePaths());
 
@@ -933,6 +966,37 @@ export async function loadSessionData(
 export async function loadMonthlyUsageData(
 	options?: LoadOptions,
 ): Promise<MonthlyUsage[]> {
+	// If useServer is true, fetch from server instead of local files
+	if (options?.useServer === true) {
+		const serverData = await fetchMonthlyUsage(options?.since, options?.until);
+		if (serverData == null) {
+			logger.debug('No server data available for monthly usage');
+			return [];
+		}
+
+		// Convert server data to our MonthlyUsage format
+		const monthlyUsages: MonthlyUsage[] = serverData.monthly.map(month => ({
+			month: createMonthlyDate(month.month),
+			inputTokens: month.inputTokens,
+			outputTokens: month.outputTokens,
+			cacheCreationTokens: month.cacheCreationTokens,
+			cacheReadTokens: month.cacheReadTokens,
+			totalCost: month.cost,
+			modelsUsed: month.modelBreakdowns.map(mb => createModelName(mb.modelName)),
+			modelBreakdowns: month.modelBreakdowns.map(mb => ({
+				modelName: createModelName(mb.modelName),
+				inputTokens: mb.inputTokens,
+				outputTokens: mb.outputTokens,
+				cacheCreationTokens: mb.cacheCreationInputTokens,
+				cacheReadTokens: mb.cacheReadInputTokens,
+				cost: mb.cost,
+			})),
+		}));
+
+		// Sort by month based on order option (default to descending)
+		return sortByDate(monthlyUsages, item => item.month, options?.order);
+	}
+
 	const dailyData = await loadDailyUsageData(options);
 
 	// Group daily data by month using Object.groupBy

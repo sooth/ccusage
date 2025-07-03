@@ -103,7 +103,7 @@ export class LiveMonitor implements Disposable {
 				// Find the base directory for this file
 				const fileInfo = filesWithBaseDirs.find(item => item.file === file);
 				const baseDir = fileInfo?.baseDir ?? '';
-				
+
 				// Extract project path from file path
 				const relativePath = path.relative(baseDir, file);
 				const parts = relativePath.split(path.sep);

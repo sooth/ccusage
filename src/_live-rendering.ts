@@ -94,11 +94,11 @@ export function renderLiveDisplay(terminal: TerminalManager, block: SessionBlock
 	const now = new Date();
 
 	// Calculate key metrics - use combined data if available (including cache tokens)
-	const localTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens +
-		block.tokenCounts.cacheCreationInputTokens + block.tokenCounts.cacheReadInputTokens;
+	const localTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens
+		+ block.tokenCounts.cacheCreationInputTokens + block.tokenCounts.cacheReadInputTokens;
 	const totalTokens = combinedData != null
-		? combinedData.totalTokens.inputTokens + combinedData.totalTokens.outputTokens +
-		  combinedData.totalTokens.cacheCreationInputTokens + combinedData.totalTokens.cacheReadInputTokens
+		? combinedData.totalTokens.inputTokens + combinedData.totalTokens.outputTokens
+		+ combinedData.totalTokens.cacheCreationInputTokens + combinedData.totalTokens.cacheReadInputTokens
 		: localTokens;
 	const remoteTokens = totalTokens - localTokens;
 	const remoteHostCount = combinedData?.remoteHostCount ?? 0;

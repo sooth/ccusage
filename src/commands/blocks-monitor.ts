@@ -1,5 +1,5 @@
 import type { LiveMonitoringConfig } from '../_live-rendering.ts';
-import type { CombinedTokenData } from '../_server-client.ts';
+import type { CombinedTokenData, GuidStatusResponseV2 } from '../_server-client.ts';
 import type { SessionBlock } from '../_session-blocks.ts';
 import { hostname } from 'node:os';
 import path from 'node:path';
@@ -375,28 +375,40 @@ function printActiveBlockInfo(block: SessionBlock, config: LiveMonitoringConfig,
 		}
 	}
 	else if (combinedData?.guidResponse != null) {
-		// Fallback to v1 API display
+		// Fallback to v2 API display
+		const guidResponse: GuidStatusResponseV2 = combinedData.guidResponse;
 		log(`\n${pc.bold('Host Breakdown:')}`);
 		log(`  ${currentHostname} (current):`);
 		log(`    Project: ${currentProject}`);
 		log(`    Tokens: ${formatNumber(localTokens)}`);
 
 		// Show remote hosts
-		const remoteHosts = combinedData.guidResponse.entries.filter(
-			entry => entry.hostname !== currentHostname,
+		const remoteHosts = guidResponse.entries.filter(
+			(entry): entry is typeof guidResponse.entries[0] => entry.hostname !== currentHostname,
 		);
 
 		for (const host of remoteHosts) {
-			const hostTotalTokens = host.tokens.inputTokens + host.tokens.outputTokens;
+			// v2 response - aggregate tokens from all projects
+			let hostTotalTokens = 0;
+			for (const project of host.projects) {
+				hostTotalTokens += project.tokens.inputTokens + project.tokens.outputTokens
+					+ project.tokens.cacheCreationTokens + project.tokens.cacheReadTokens;
+			}
 			log(`  ${host.hostname}:`);
 			log(`    Tokens: ${formatNumber(hostTotalTokens)}`);
-			log(`    Last Update: ${new Date(host.lastUpdated).toLocaleTimeString()}`);
 
-			// Show model breakdown if available
-			if (host.modelBreakdowns != null && host.modelBreakdowns.length > 0) {
-				for (const mb of host.modelBreakdowns) {
-					const modelTokens = mb.inputTokens + mb.outputTokens;
-					log(`      ${mb.modelName}: ${formatNumber(modelTokens)} tokens`);
+			// Show project breakdown
+			for (const project of host.projects) {
+				const projectTotalTokens = project.tokens.inputTokens + project.tokens.outputTokens
+					+ project.tokens.cacheCreationTokens + project.tokens.cacheReadTokens;
+				log(`    ${project.projectName}: ${formatNumber(projectTotalTokens)} tokens`);
+
+				if (project.modelBreakdowns != null && project.modelBreakdowns.length > 0) {
+					for (const mb of project.modelBreakdowns) {
+						const modelTokens = mb.inputTokens + mb.outputTokens
+							+ mb.cacheCreationInputTokens + mb.cacheReadInputTokens;
+						log(`      ${mb.modelName}: ${formatNumber(modelTokens)} tokens`);
+					}
 				}
 			}
 		}

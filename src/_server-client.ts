@@ -66,6 +66,67 @@ export type GuidStatusResponseV2 = {
 };
 
 /**
+ * Daily usage response from server
+ */
+export type DailyUsageResponse = {
+	guid: string;
+	daily: Array<{
+		date: string;
+		inputTokens: number;
+		outputTokens: number;
+		cacheCreationTokens: number;
+		cacheReadTokens: number;
+		totalTokens: number;
+		cost: number;
+		hostCount: number;
+		projectCount: number;
+		modelBreakdowns: Array<{
+			modelName: string;
+			inputTokens: number;
+			outputTokens: number;
+			cacheCreationInputTokens: number;
+			cacheReadInputTokens: number;
+			cost: number;
+		}>;
+	}>;
+	dateRange: {
+		since: string;
+		until: string;
+	};
+};
+
+/**
+ * Monthly usage response from server
+ */
+export type MonthlyUsageResponse = {
+	guid: string;
+	monthly: Array<{
+		month: string;
+		inputTokens: number;
+		outputTokens: number;
+		cacheCreationTokens: number;
+		cacheReadTokens: number;
+		totalTokens: number;
+		cost: number;
+		days: number;
+		hostCount: number;
+		projectCount: number;
+		modelBreakdowns: Array<{
+			modelName: string;
+			inputTokens: number;
+			outputTokens: number;
+			cacheCreationInputTokens: number;
+			cacheReadInputTokens: number;
+			cost: number;
+		}>;
+	}>;
+	dateRange: {
+		since: string;
+		until: string;
+	};
+};
+
+/**
  * Get or create a persistent GUID for this user
  */
 function getUserGuid(): string {
@@ -159,6 +220,159 @@ export async function fetchGuidEntries(): Promise<GuidStatusResponseV2 | null> {
 }
 
 /**
+ * Fetch daily usage data from the server
+ */
+export async function fetchDailyUsage(since?: string, until?: string): Promise<DailyUsageResponse | null> {
+	const serverUrl = process.env.CCUSAGE_SERVER_URL ?? DEFAULT_SERVER_URL;
+	const guid = getUserGuid();
+
+	try {
+		const params = new URLSearchParams();
+		if (since != null) {
+			params.append('since', since);
+		}
+		if (until != null) {
+			params.append('until', until);
+		}
+
+		const queryString = params.toString();
+		const url = `${serverUrl}/v2/daily/${guid}${queryString !== '' ? `?${queryString}` : ''}`;
+
+		const response = await fetch(url, {
+			method: 'GET',
+			signal: AbortSignal.timeout(10000), // 10 second timeout for potentially large data
+		});
+
+		if (!response.ok) {
+			if (response.status === 404) {
+				// No data for this GUID yet
+				return null;
+			}
+			const error = await response.text();
+			logger.warn(`Failed to fetch daily usage (${response.status}): ${error}`);
+			return null;
+		}
+
+		const data = await response.json() as DailyUsageResponse;
+		return data;
+	}
+	catch (error) {
+		logger.debug(`Failed to fetch daily usage: ${String(error)}`);
+		return null;
+	}
+}
+
+/**
+ * Fetch monthly usage data from the server
+ */
+export async function fetchMonthlyUsage(since?: string, until?: string): Promise<MonthlyUsageResponse | null> {
+	const serverUrl = process.env.CCUSAGE_SERVER_URL ?? DEFAULT_SERVER_URL;
+	const guid = getUserGuid();
+
+	try {
+		const params = new URLSearchParams();
+		if (since != null) {
+			params.append('since', since);
+		}
+		if (until != null) {
+			params.append('until', until);
+		}
+
+		const queryString = params.toString();
+		const url = `${serverUrl}/v2/monthly/${guid}${queryString !== '' ? `?${queryString}` : ''}`;
+
+		const response = await fetch(url, {
+			method: 'GET',
+			signal: AbortSignal.timeout(10000), // 10 second timeout for potentially large data
+		});
+
+		if (!response.ok) {
+			if (response.status === 404) {
+				// No data for this GUID yet
+				return null;
+			}
+			const error = await response.text();
+			logger.warn(`Failed to fetch monthly usage (${response.status}): ${error}`);
+			return null;
+		}
+
+		const data = await response.json() as MonthlyUsageResponse;
+		return data;
+	}
+	catch (error) {
+		logger.debug(`Failed to fetch monthly usage: ${String(error)}`);
+		return null;
+	}
+}
+
+/**
+ * Submit backfill data to the server
+ */
+export async function submitBackfillData(
+	guid: string,
+	hostname: string,
+	historicalData: Record<string, Record<string, {
+		tokens: {
+			inputTokens: number;
+			outputTokens: number;
+			cacheCreationTokens: number;
+			cacheReadTokens: number;
+			totalTokens: number;
+		};
+		modelBreakdowns: Array<{
+			modelName: string;
+			inputTokens: number;
+			outputTokens: number;
+			cacheCreationInputTokens: number;
+			cacheReadInputTokens: number;
+			cost: number;
+		}>;
+		cost: number;
+	}>>,
+): Promise<boolean> {
+	const serverUrl = process.env.CCUSAGE_SERVER_URL ?? DEFAULT_SERVER_URL;
+	
+	try {
+		const response = await fetch(`${serverUrl}/v2/backfill`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				guid,
+				hostname,
+				historicalData,
+			}),
+			signal: AbortSignal.timeout(30000), // 30 second timeout for large data
+		});
+
+		if (!response.ok) {
+			const error = await response.text();
+			logger.warn(`Failed to submit backfill data (${response.status}): ${error}`);
+			return false;
+		}
+
+		return true;
+	}
+	catch (error) {
+		logger.debug(`Failed to submit backfill data: ${String(error)}`);
+		return false;
+	}
+}
+
+/**
+ * Get the current GUID value (exposed for commands that need it)
+ */
+export function getGuid(): string {
+	return getUserGuid();
+}
+
+/**
+ * Get the current server URL (exposed for commands that need it)
+ */
+export function getServerUrl(): string {
+	return process.env.CCUSAGE_SERVER_URL ?? DEFAULT_SERVER_URL;
+}
+
+/**
  * Submit token usage data with project information to the server
  */
 export async function submitProjectTokenUsage(projectData: Array<{
@@ -231,16 +445,16 @@ function addTokenCounts(a: TokenCounts, b: TokenCounts): TokenCounts {
 export function extractProjectDataFromSessionBlock(block: SessionBlock): ProjectData[] {
 	// Group entries by project
 	const projectGroups = new Map<string, LoadedUsageEntry[]>();
-	
+
 	for (const entry of block.entries) {
 		const projectName = entry.projectPath ?? 'Unknown Project';
 		const existing = projectGroups.get(projectName) ?? [];
 		existing.push(entry);
 		projectGroups.set(projectName, existing);
 	}
-	
+
 	const projectDataArray: ProjectData[] = [];
-	
+
 	for (const [projectName, entries] of projectGroups) {
 		// Aggregate tokens for this project
 		const tokens: TokenCounts = {
@@ -249,16 +463,16 @@ export function extractProjectDataFromSessionBlock(block: SessionBlock): Project
 			cacheCreationInputTokens: 0,
 			cacheReadInputTokens: 0,
 		};
-		
+
 		// Track per-model stats
 		const modelStats = new Map<string, SessionModelBreakdown>();
-		
+
 		for (const entry of entries) {
 			tokens.inputTokens += entry.usage.inputTokens;
 			tokens.outputTokens += entry.usage.outputTokens;
 			tokens.cacheCreationInputTokens += entry.usage.cacheCreationInputTokens;
 			tokens.cacheReadInputTokens += entry.usage.cacheReadInputTokens;
-			
+
 			// Aggregate per-model stats
 			const existing = modelStats.get(entry.model) ?? {
 				modelName: entry.model,
@@ -268,7 +482,7 @@ export function extractProjectDataFromSessionBlock(block: SessionBlock): Project
 				cacheReadInputTokens: 0,
 				cost: 0,
 			};
-			
+
 			modelStats.set(entry.model, {
 				modelName: entry.model,
 				inputTokens: existing.inputTokens + entry.usage.inputTokens,
@@ -278,14 +492,14 @@ export function extractProjectDataFromSessionBlock(block: SessionBlock): Project
 				cost: existing.cost + (entry.costUSD ?? 0),
 			});
 		}
-		
+
 		projectDataArray.push({
 			projectName,
 			tokens,
 			modelBreakdowns: Array.from(modelStats.values()),
 		});
 	}
-	
+
 	return projectDataArray;
 }
 
@@ -364,7 +578,7 @@ export class ServerSubmissionManager implements Disposable {
 		if (sessionEndTime != null) {
 			this.sessionEndTime = sessionEndTime;
 		}
-		
+
 		// Also update aggregated tokens for backward compatibility
 		const aggregated: TokenCounts = {
 			inputTokens: 0,
@@ -372,20 +586,20 @@ export class ServerSubmissionManager implements Disposable {
 			cacheCreationInputTokens: 0,
 			cacheReadInputTokens: 0,
 		};
-		
+
 		const allModelBreakdowns: SessionModelBreakdown[] = [];
-		
+
 		for (const project of projectData) {
 			aggregated.inputTokens += project.tokens.inputTokens;
 			aggregated.outputTokens += project.tokens.outputTokens;
 			aggregated.cacheCreationInputTokens += project.tokens.cacheCreationInputTokens;
 			aggregated.cacheReadInputTokens += project.tokens.cacheReadInputTokens;
-			
+
 			if (project.modelBreakdowns != null) {
 				allModelBreakdowns.push(...project.modelBreakdowns);
 			}
 		}
-		
+
 		this.latestLocalTokens = aggregated;
 		this.latestModelBreakdowns = allModelBreakdowns;
 	}
@@ -446,7 +660,7 @@ if (import.meta.vitest != null) {
 		});
 
 		it('should return empty tokens when entries array is empty', () => {
-			const remoteData: GuidStatusResponse = {
+			const remoteData: GuidStatusResponseV2 = {
 				guid: 'test-guid',
 				entries: [],
 			};

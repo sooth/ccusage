@@ -27,6 +27,7 @@ export const monthlyCommand = define({
 			mode: ctx.values.mode,
 			order: ctx.values.order,
 			offline: ctx.values.offline,
+			useServer: ctx.values.server,
 		});
 
 		if (monthlyData.length === 0) {

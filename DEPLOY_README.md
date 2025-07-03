@@ -1,6 +1,7 @@
 # Deploying ccusage Server to PythonAnywhere
 
 ## Important Notes
+
 - The Flask app file **MUST** be named `flask_app.py` on PythonAnywhere
 - The deployment will **overwrite** the existing file
 - Site: https://soothaa.pythonanywhere.com
@@ -75,6 +76,7 @@ curl https://soothaa.pythonanywhere.com/v2/status/{guid}
 ## Server Features (v2)
 
 The deployed server now supports:
+
 - **v1 endpoints** (backward compatible): Aggregated host-level data
 - **v2 endpoints** (new): Project-level tracking
 - In-memory storage (data persists until server restart)

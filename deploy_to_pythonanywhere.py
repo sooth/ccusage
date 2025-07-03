@@ -17,16 +17,11 @@ API_BASE = 'https://www.pythonanywhere.com'
 REMOTE_FILE_PATH = f'/home/{USERNAME}/mysite/flask_app.py'
 
 def get_api_token():
-    """Get API token from environment or prompt user"""
+    """Get API token from environment or use hardcoded token"""
     token = os.environ.get('PYTHONANYWHERE_API_TOKEN')
     if not token:
-        print("API token not found in environment.")
-        print("To get your API token:")
-        print("1. Log into PythonAnywhere")
-        print("2. Go to Account > API Token tab")
-        print("3. Generate a new token if needed")
-        print("4. Copy the token")
-        token = getpass.getpass("Enter your PythonAnywhere API token: ")
+        # Hardcoded token for automated deployment
+        token = 'f7eb94ea3a882239f48a316ac9e4c654c4c43c96'
     return token
 
 def upload_file(local_file_path, api_token):

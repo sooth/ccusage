@@ -200,7 +200,7 @@ function createBlock(startTime: Date, entries: LoadedUsageEntry[], now: Date, se
 		tokenCounts.cacheReadInputTokens += entry.usage.cacheReadInputTokens;
 		costUSD += entry.costUSD ?? 0;
 		models.push(entry.model);
-		
+
 		// Track project
 		if (entry.projectPath != null) {
 			projects.push(entry.projectPath);
@@ -301,8 +301,8 @@ export function calculateBurnRate(block: SessionBlock): BurnRate | null {
 		return null;
 	}
 
-	const totalTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens +
-		block.tokenCounts.cacheCreationInputTokens + block.tokenCounts.cacheReadInputTokens;
+	const totalTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens
+		+ block.tokenCounts.cacheCreationInputTokens + block.tokenCounts.cacheReadInputTokens;
 	const tokensPerMinute = totalTokens / durationMinutes;
 	const costPerHour = (block.costUSD / durationMinutes) * 60;
 
@@ -331,8 +331,8 @@ export function projectBlockUsage(block: SessionBlock): ProjectedUsage | null {
 	const remainingTime = block.endTime.getTime() - now.getTime();
 	const remainingMinutes = Math.max(0, remainingTime / (1000 * 60));
 
-	const currentTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens +
-		block.tokenCounts.cacheCreationInputTokens + block.tokenCounts.cacheReadInputTokens;
+	const currentTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens
+		+ block.tokenCounts.cacheCreationInputTokens + block.tokenCounts.cacheReadInputTokens;
 	const projectedAdditionalTokens = burnRate.tokensPerMinute * remainingMinutes;
 	const totalTokens = currentTokens + projectedAdditionalTokens;
 
