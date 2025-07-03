@@ -18,6 +18,34 @@
 
 > Analyze your Claude Code token usage and costs from local JSONL files — incredibly fast and informative!
 
+## 🚀 New Features Since Fork
+
+This fork adds powerful new capabilities to ccusage:
+
+### 🌐 Multi-Host Server Integration
+- **Centralized Usage Tracking**: Aggregate token usage across multiple machines
+- **Server Commands**: Use `--server` flag with daily/monthly/blocks commands to view aggregated data
+- **Automatic Synchronization**: Live monitoring automatically syncs data to server every 30 seconds
+- **Session Expiration**: Server automatically archives completed sessions for historical tracking
+
+### 📤 Historical Data Backfill
+- **New `backfill` Command**: Upload all your historical usage data to the server
+- **Multi-Machine Aggregation**: Combine usage data from different computers
+- **Progress Tracking**: Visual progress bar during upload
+- **Dry Run Mode**: Test what would be uploaded with `--dry-run`
+
+### 📊 Enhanced Token Tracking
+- **Complete Token Counts**: All displays now include cache creation and cache read tokens
+- **Accurate Monitoring**: Live monitoring shows true token usage including massive cache tokens
+- **Project-Level Breakdown**: See token usage broken down by project in live monitoring
+- **Token Type Details**: Detailed breakdown showing Input/Output/Cache Create/Cache Read for each project
+
+### 🔧 Improved Monitoring
+- **Real-Time Updates**: Live dashboard updates every second with current usage
+- **Burn Rate Projections**: See token consumption rate and cost projections
+- **Multi-Project Support**: Track multiple Claude projects simultaneously
+- **Responsive Display**: Automatically adjusts to terminal width
+
 ## Installation
 
 ### Quick Start (Recommended)
@@ -34,7 +62,16 @@ npx ccusage@latest
 npm install -g ccusage
 ```
 
+### Download Binary
+
+Download pre-built binaries from [Releases](https://github.com/sooth/ccusage/releases/latest):
+- Linux x64
+- macOS x64 
+- macOS ARM64
+
 ## Usage
+
+### Basic Commands
 
 ```bash
 # Basic usage
@@ -45,12 +82,40 @@ ccusage session  # Usage by conversation session
 ccusage blocks   # 5-hour billing windows
 
 # Live monitoring
-ccusage blocks --live  # Real-time usage dashboard
+ccusage blocks --live         # Real-time usage dashboard
+ccusage blocks-monitor        # Continuous monitoring with server sync
+```
 
-# Filters and options
+### Server Integration
+
+```bash
+# Set server URL (optional, defaults to https://soothaa.pythonanywhere.com)
+export CCUSAGE_SERVER_URL=https://your-server.com
+
+# View aggregated data from server
+ccusage daily --server
+ccusage monthly --server
+ccusage blocks --server
+
+# Upload historical data
+ccusage backfill --server
+ccusage backfill --server --dry-run  # Test without uploading
+```
+
+### Filters and Options
+
+```bash
+# Date filtering
 ccusage daily --since 20250525 --until 20250530
-ccusage daily --json  # JSON output
-ccusage daily --breakdown  # Per-model cost breakdown
+
+# Output formats
+ccusage daily --json              # JSON output
+ccusage daily --breakdown         # Per-model cost breakdown
+
+# Cost calculation modes
+ccusage daily --mode calculate    # Always calculate from tokens
+ccusage daily --mode display      # Use pre-calculated costs
+ccusage daily --mode auto         # Smart mode (default)
 ```
 
 ## Features
@@ -59,41 +124,22 @@ ccusage daily --breakdown  # Per-model cost breakdown
 - 📅 **Monthly Report**: View token usage and costs aggregated by month
 - 💬 **Session Report**: View usage grouped by conversation sessions
 - ⏰ **5-Hour Blocks Report**: Track usage within Claude's billing windows with active block monitoring
-- 📈 **Live Monitoring**: Real-time dashboard showing active session progress, token burn rate, and cost projections with `blocks --live`
+- 📈 **Live Monitoring**: Real-time dashboard showing active session progress, token burn rate, and cost projections
+- 🌐 **Multi-Host Support**: Aggregate usage data across multiple machines via server
+- 📤 **Historical Backfill**: Upload existing local data to server for aggregation
 - 🤖 **Model Tracking**: See which Claude models you're using (Opus, Sonnet, etc.)
 - 📊 **Model Breakdown**: View per-model cost breakdown with `--breakdown` flag
-- 📅 **Date Filtering**: Filter reports by date range using `--since` and `--until`
-- 📁 **Custom Path**: Support for custom Claude data directory locations
+- 📁 **Multi-Directory Support**: Automatically finds Claude data in both `~/.claude` and `~/.config/claude`
 - 🎨 **Beautiful Output**: Colorful table-formatted display with automatic responsive layout
-- 📱 **Smart Tables**: Automatic compact mode for narrow terminals (< 100 characters) with essential columns
-- 📋 **Enhanced Model Display**: Model names shown as bulleted lists for better readability
-- 📄 **JSON Output**: Export data in structured JSON format with `--json`
+- 📋 **Project-Level Tracking**: See token usage broken down by individual projects
 - 💰 **Cost Tracking**: Shows costs in USD for each day/month/session
-- 🔄 **Cache Token Support**: Tracks and displays cache creation and cache read tokens separately
-- 🌐 **Offline Mode**: Use pre-cached pricing data without network connectivity with `--offline` (Claude models only)
+- 🔄 **Cache Token Support**: Tracks and displays all token types including cache tokens
+- 🌐 **Offline Mode**: Use pre-cached pricing data without network connectivity
 - 🔌 **MCP Integration**: Built-in Model Context Protocol server for integration with other tools
 
 ## Documentation
 
 Full documentation is available at **[ccusage.com](https://ccusage.com/)**
-
-## Sponsors
-
-<p align="center">
-    <a href="https://github.com/sponsors/ryoppippi">
-        <img src="https://cdn.jsdelivr.net/gh/ryoppippi/sponsors@main/sponsors.svg">
-    </a>
-</p>
-
-## Star History
-
-<a href="https://www.star-history.com/#ryoppippi/ccusage&Date">
-    <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=ryoppippi/ccusage&type=Date&theme=dark" />
-        <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=ryoppippi/ccusage&type=Date" />
-        <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=ryoppippi/ccusage&type=Date" />
-    </picture>
-</a>
 
 ## License
 
