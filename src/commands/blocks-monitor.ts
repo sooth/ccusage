@@ -173,7 +173,7 @@ async function startCLIMonitoring(config: LiveMonitoringConfig): Promise<void> {
 			else {
 				// Update server with project-level token data
 				const projectData = extractProjectDataFromSessionBlock(activeBlock);
-				submissionManager.updateProjectData(projectData);
+				submissionManager.updateProjectData(projectData, activeBlock.endTime);
 
 				// Get combined data (local + remote)
 				const combinedData = submissionManager.getCombinedData();
@@ -208,10 +208,12 @@ function printActiveBlockInfo(block: SessionBlock, config: LiveMonitoringConfig,
 	const currentProject = path.basename(process.cwd());
 	const currentHostname = hostname();
 
-	// Calculate token metrics
-	const localTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens;
+	// Calculate token metrics (including cache tokens)
+	const localTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens
+		+ block.tokenCounts.cacheCreationInputTokens + block.tokenCounts.cacheReadInputTokens;
 	const totalTokens = combinedData != null
 		? combinedData.totalTokens.inputTokens + combinedData.totalTokens.outputTokens
+		+ combinedData.totalTokens.cacheCreationInputTokens + combinedData.totalTokens.cacheReadInputTokens
 		: localTokens;
 	const remoteTokens = totalTokens - localTokens;
 	const remoteHostCount = combinedData?.remoteHostCount ?? 0;
@@ -304,20 +306,35 @@ function printActiveBlockInfo(block: SessionBlock, config: LiveMonitoringConfig,
 		log(`\n${pc.bold('Models:')} ${block.models.join(', ')}`);
 	}
 
-	// Host breakdown with project detail (v2 API)
-	if (combinedData?.guidResponseV2 != null) {
+	// Host breakdown with project detail
+	if (combinedData?.guidResponse != null) {
 		log(`\n${pc.bold('Host Breakdown (Project Detail):')}`);
-		
+
 		// Show current host with its projects
-		const currentHostEntry = combinedData.guidResponseV2.entries.find(
+		const currentHostEntry = combinedData.guidResponse.entries.find(
 			entry => entry.hostname === currentHostname,
 		);
-		
+
 		if (currentHostEntry != null) {
 			log(`  ${currentHostname} (current):`);
 			for (const project of currentHostEntry.projects) {
-				const projectTokens = project.tokens.inputTokens + project.tokens.outputTokens;
+				const projectTokens = project.tokens.inputTokens + project.tokens.outputTokens
+					+ project.tokens.cacheCreationTokens + project.tokens.cacheReadTokens;
 				log(`    ${project.projectName}: ${formatNumber(projectTokens)} tokens`);
+
+				// Show token type breakdown (only non-zero values)
+				if (project.tokens.inputTokens > 0) {
+					log(`      Input: ${formatNumber(project.tokens.inputTokens)}`);
+				}
+				if (project.tokens.outputTokens > 0) {
+					log(`      Output: ${formatNumber(project.tokens.outputTokens)}`);
+				}
+				if (project.tokens.cacheCreationTokens > 0) {
+					log(`      Cache Create: ${formatNumber(project.tokens.cacheCreationTokens)}`);
+				}
+				if (project.tokens.cacheReadTokens > 0) {
+					log(`      Cache Read: ${formatNumber(project.tokens.cacheReadTokens)}`);
+				}
 			}
 		}
 		else {
@@ -328,15 +345,31 @@ function printActiveBlockInfo(block: SessionBlock, config: LiveMonitoringConfig,
 		}
 
 		// Show remote hosts with their projects
-		const remoteHosts = combinedData.guidResponseV2.entries.filter(
+		const remoteHosts = combinedData.guidResponse.entries.filter(
 			entry => entry.hostname !== currentHostname,
 		);
 
 		for (const host of remoteHosts) {
 			log(`  ${host.hostname}:`);
 			for (const project of host.projects) {
-				const projectTokens = project.tokens.inputTokens + project.tokens.outputTokens;
+				const projectTokens = project.tokens.inputTokens + project.tokens.outputTokens
+					+ project.tokens.cacheCreationTokens + project.tokens.cacheReadTokens;
 				log(`    ${project.projectName}: ${formatNumber(projectTokens)} tokens`);
+
+				// Show token type breakdown (only non-zero values)
+				if (project.tokens.inputTokens > 0) {
+					log(`      Input: ${formatNumber(project.tokens.inputTokens)}`);
+				}
+				if (project.tokens.outputTokens > 0) {
+					log(`      Output: ${formatNumber(project.tokens.outputTokens)}`);
+				}
+				if (project.tokens.cacheCreationTokens > 0) {
+					log(`      Cache Create: ${formatNumber(project.tokens.cacheCreationTokens)}`);
+				}
+				if (project.tokens.cacheReadTokens > 0) {
+					log(`      Cache Read: ${formatNumber(project.tokens.cacheReadTokens)}`);
+				}
+
 				log(`      Last Update: ${new Date(project.lastUpdated).toLocaleTimeString()}`);
 			}
 		}

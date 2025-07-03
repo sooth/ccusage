@@ -80,7 +80,7 @@ export async function startLiveMonitoring(config: LiveMonitoringConfig): Promise
 			// Update server with project-level token data
 			const { extractProjectDataFromSessionBlock } = await import('../_server-client.ts');
 			const projectData = extractProjectDataFromSessionBlock(activeBlock);
-			submissionManager.updateProjectData(projectData);
+			submissionManager.updateProjectData(projectData, activeBlock.endTime);
 
 			// Get combined data (local + remote)
 			const combinedData = submissionManager.getCombinedData();

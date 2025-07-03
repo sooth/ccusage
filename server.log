@@ -1,0 +1,45 @@
+ * Serving Flask app 'flask_app_v2'
+ * Debug mode: off
+2025-07-02 10:47:21,419 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:9017
+ * Running on http://172.17.17.73:9017
+2025-07-02 10:47:21,419 - INFO - [33mPress CTRL+C to quit[0m
+2025-07-02 10:50:03,738 - INFO - Updated usage for e84757e8-645c-44aa-acb3-2c6d60bea792/M4x.local with 1 projects (v2 API)
+2025-07-02 10:50:03,738 - INFO - 127.0.0.1 - - [02/Jul/2025 10:50:03] "POST /v2/update HTTP/1.1" 200 -
+2025-07-02 10:50:03,746 - INFO - 127.0.0.1 - - [02/Jul/2025 10:50:03] "GET /v2/status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:50:03,749 - INFO - 127.0.0.1 - - [02/Jul/2025 10:50:03] "GET /status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:50:33,729 - INFO - Updated usage for e84757e8-645c-44aa-acb3-2c6d60bea792/M4x.local with 1 projects (v2 API)
+2025-07-02 10:50:33,729 - INFO - 127.0.0.1 - - [02/Jul/2025 10:50:33] "POST /v2/update HTTP/1.1" 200 -
+2025-07-02 10:50:33,732 - INFO - 127.0.0.1 - - [02/Jul/2025 10:50:33] "GET /v2/status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:50:33,734 - INFO - 127.0.0.1 - - [02/Jul/2025 10:50:33] "GET /status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:51:03,738 - INFO - Updated usage for e84757e8-645c-44aa-acb3-2c6d60bea792/M4x.local with 1 projects (v2 API)
+2025-07-02 10:51:03,738 - INFO - 127.0.0.1 - - [02/Jul/2025 10:51:03] "POST /v2/update HTTP/1.1" 200 -
+2025-07-02 10:51:03,744 - INFO - 127.0.0.1 - - [02/Jul/2025 10:51:03] "GET /v2/status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:51:03,748 - INFO - 127.0.0.1 - - [02/Jul/2025 10:51:03] "GET /status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:51:33,730 - INFO - Updated usage for e84757e8-645c-44aa-acb3-2c6d60bea792/M4x.local with 1 projects (v2 API)
+2025-07-02 10:51:33,730 - INFO - 127.0.0.1 - - [02/Jul/2025 10:51:33] "POST /v2/update HTTP/1.1" 200 -
+2025-07-02 10:51:33,733 - INFO - 127.0.0.1 - - [02/Jul/2025 10:51:33] "GET /v2/status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:51:33,735 - INFO - 127.0.0.1 - - [02/Jul/2025 10:51:33] "GET /status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:51:57,324 - INFO - 127.0.0.1 - - [02/Jul/2025 10:51:57] "GET /v2/status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:52:03,745 - INFO - Updated usage for e84757e8-645c-44aa-acb3-2c6d60bea792/M4x.local with 1 projects (v2 API)
+2025-07-02 10:52:03,745 - INFO - 127.0.0.1 - - [02/Jul/2025 10:52:03] "POST /v2/update HTTP/1.1" 200 -
+2025-07-02 10:52:03,751 - INFO - 127.0.0.1 - - [02/Jul/2025 10:52:03] "GET /v2/status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:52:03,754 - INFO - 127.0.0.1 - - [02/Jul/2025 10:52:03] "GET /status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:52:33,751 - INFO - Updated usage for e84757e8-645c-44aa-acb3-2c6d60bea792/M4x.local with 1 projects (v2 API)
+2025-07-02 10:52:33,751 - INFO - 127.0.0.1 - - [02/Jul/2025 10:52:33] "POST /v2/update HTTP/1.1" 200 -
+2025-07-02 10:52:33,755 - INFO - 127.0.0.1 - - [02/Jul/2025 10:52:33] "GET /v2/status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:52:33,758 - INFO - 127.0.0.1 - - [02/Jul/2025 10:52:33] "GET /status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:53:03,854 - INFO - Updated usage for e84757e8-645c-44aa-acb3-2c6d60bea792/M4x.local with 1 projects (v2 API)
+2025-07-02 10:53:03,854 - INFO - 127.0.0.1 - - [02/Jul/2025 10:53:03] "POST /v2/update HTTP/1.1" 200 -
+2025-07-02 10:53:03,968 - INFO - 127.0.0.1 - - [02/Jul/2025 10:53:03] "GET /v2/status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:53:04,051 - INFO - 127.0.0.1 - - [02/Jul/2025 10:53:04] "GET /status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:53:33,758 - INFO - Updated usage for e84757e8-645c-44aa-acb3-2c6d60bea792/M4x.local with 1 projects (v2 API)
+2025-07-02 10:53:33,759 - INFO - 127.0.0.1 - - [02/Jul/2025 10:53:33] "POST /v2/update HTTP/1.1" 200 -
+2025-07-02 10:53:33,764 - INFO - 127.0.0.1 - - [02/Jul/2025 10:53:33] "GET /v2/status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:53:33,767 - INFO - 127.0.0.1 - - [02/Jul/2025 10:53:33] "GET /status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:54:13,974 - INFO - 127.0.0.1 - - [02/Jul/2025 10:54:13] "GET /v2/status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:54:58,850 - INFO - Updated usage for e84757e8-645c-44aa-acb3-2c6d60bea792/M4x.local with 4 projects (v2 API)
+2025-07-02 10:54:58,850 - INFO - 127.0.0.1 - - [02/Jul/2025 10:54:58] "POST /v2/update HTTP/1.1" 200 -
+2025-07-02 10:54:58,857 - INFO - 127.0.0.1 - - [02/Jul/2025 10:54:58] "GET /v2/status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -
+2025-07-02 10:54:58,860 - INFO - 127.0.0.1 - - [02/Jul/2025 10:54:58] "GET /status/e84757e8-645c-44aa-acb3-2c6d60bea792 HTTP/1.1" 200 -

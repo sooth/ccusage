@@ -18,22 +18,7 @@ const DEFAULT_SERVER_URL = 'https://soothaa.pythonanywhere.com';
 const SUBMISSION_INTERVAL_MS = 30000; // 30 seconds
 
 /**
- * Token submission payload (v1 - backward compatible)
- */
-export type TokenSubmission = {
-	guid: string;
-	hostname: string;
-	tokens: {
-		inputTokens: number;
-		outputTokens: number;
-		cacheCreationTokens: number;
-		cacheReadTokens: number;
-	};
-	modelBreakdowns?: SessionModelBreakdown[];
-};
-
-/**
- * Project-level token submission payload (v2)
+ * Project-level token submission payload
  */
 export type ProjectTokenSubmission = {
 	guid: string;
@@ -48,36 +33,11 @@ export type ProjectTokenSubmission = {
 		};
 		modelBreakdowns?: SessionModelBreakdown[];
 	}>;
+	expiresAt?: string; // ISO 8601 timestamp when this session expires
 };
 
 /**
- * Server response for a GUID status query (v1 - backward compatible)
- */
-export type GuidStatusResponse = {
-	guid: string;
-	entries: Array<{
-		hostname: string;
-		tokens: {
-			inputTokens: number;
-			outputTokens: number;
-			cacheCreationTokens: number;
-			cacheReadTokens: number;
-			totalTokens: number;
-		};
-		lastUpdated: string;
-		modelBreakdowns?: Array<{
-			modelName: string;
-			inputTokens: number;
-			outputTokens: number;
-			cacheCreationInputTokens: number;
-			cacheReadInputTokens: number;
-			cost: number;
-		}>;
-	}>;
-};
-
-/**
- * Server response for a GUID status query with project detail (v2)
+ * Server response for a GUID status query with project detail
  */
 export type GuidStatusResponseV2 = {
 	guid: string;
@@ -134,42 +94,10 @@ function getUserGuid(): string {
 }
 
 /**
- * Fetch all entries for our GUID from the server
- */
-export async function fetchGuidEntries(): Promise<GuidStatusResponse | null> {
-	const serverUrl = process.env.CCUSAGE_SERVER_URL ?? DEFAULT_SERVER_URL;
-	const guid = getUserGuid();
-
-	try {
-		const response = await fetch(`${serverUrl}/status/${guid}`, {
-			method: 'GET',
-			signal: AbortSignal.timeout(5000), // 5 second timeout
-		});
-
-		if (!response.ok) {
-			if (response.status === 404) {
-				// No data for this GUID yet
-				return null;
-			}
-			const error = await response.text();
-			logger.warn(`Failed to fetch GUID entries (${response.status}): ${error}`);
-			return null;
-		}
-
-		const data = await response.json() as GuidStatusResponse;
-		return data;
-	}
-	catch (error) {
-		logger.debug(`Failed to fetch GUID entries: ${String(error)}`);
-		return null;
-	}
-}
-
-/**
  * Calculate merged token counts from remote entries, excluding our own hostname
  */
 export function mergeRemoteTokens(
-	remoteData: GuidStatusResponse | null,
+	remoteData: GuidStatusResponseV2 | null,
 	excludeHostname: string,
 ): TokenCounts {
 	const merged: TokenCounts = {
@@ -186,10 +114,12 @@ export function mergeRemoteTokens(
 	// Sum tokens from all entries except our own hostname
 	for (const entry of remoteData.entries) {
 		if (entry.hostname !== excludeHostname) {
-			merged.inputTokens += entry.tokens.inputTokens;
-			merged.outputTokens += entry.tokens.outputTokens;
-			merged.cacheCreationInputTokens += entry.tokens.cacheCreationTokens;
-			merged.cacheReadInputTokens += entry.tokens.cacheReadTokens;
+			for (const project of entry.projects) {
+				merged.inputTokens += project.tokens.inputTokens;
+				merged.outputTokens += project.tokens.outputTokens;
+				merged.cacheCreationInputTokens += project.tokens.cacheCreationTokens;
+				merged.cacheReadInputTokens += project.tokens.cacheReadTokens;
+			}
 		}
 	}
 
@@ -197,45 +127,9 @@ export function mergeRemoteTokens(
 }
 
 /**
- * Submit token usage data to the server
+ * Fetch all entries for our GUID from the server
  */
-export async function submitTokenUsage(tokens: TokenCounts, modelBreakdowns?: SessionModelBreakdown[]): Promise<void> {
-	const serverUrl = process.env.CCUSAGE_SERVER_URL ?? DEFAULT_SERVER_URL;
-	const payload: TokenSubmission = {
-		guid: getUserGuid(),
-		hostname: hostname(),
-		tokens: {
-			inputTokens: tokens.inputTokens,
-			outputTokens: tokens.outputTokens,
-			cacheCreationTokens: tokens.cacheCreationInputTokens,
-			cacheReadTokens: tokens.cacheReadInputTokens,
-		},
-		modelBreakdowns,
-	};
-
-	try {
-		const response = await fetch(`${serverUrl}/update`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(payload),
-			signal: AbortSignal.timeout(5000), // 5 second timeout
-		});
-
-		if (!response.ok) {
-			const error = await response.text();
-			logger.warn(`Server submission failed (${response.status}): ${error}`);
-		}
-	}
-	catch (error) {
-		// Silently fail - don't disrupt live monitoring
-		logger.debug(`Server submission error: ${String(error)}`);
-	}
-}
-
-/**
- * Fetch all entries for our GUID from the server (v2 with project detail)
- */
-export async function fetchGuidEntriesV2(): Promise<GuidStatusResponseV2 | null> {
+export async function fetchGuidEntries(): Promise<GuidStatusResponseV2 | null> {
 	const serverUrl = process.env.CCUSAGE_SERVER_URL ?? DEFAULT_SERVER_URL;
 	const guid = getUserGuid();
 
@@ -265,13 +159,13 @@ export async function fetchGuidEntriesV2(): Promise<GuidStatusResponseV2 | null>
 }
 
 /**
- * Submit token usage data with project information to the server (v2)
+ * Submit token usage data with project information to the server
  */
 export async function submitProjectTokenUsage(projectData: Array<{
 	projectName: string;
 	tokens: TokenCounts;
 	modelBreakdowns?: SessionModelBreakdown[];
-}>): Promise<void> {
+}>, expiresAt?: Date): Promise<void> {
 	const serverUrl = process.env.CCUSAGE_SERVER_URL ?? DEFAULT_SERVER_URL;
 	const payload: ProjectTokenSubmission = {
 		guid: getUserGuid(),
@@ -286,6 +180,7 @@ export async function submitProjectTokenUsage(projectData: Array<{
 			},
 			modelBreakdowns: project.modelBreakdowns,
 		})),
+		expiresAt: expiresAt?.toISOString(),
 	};
 
 	try {
@@ -315,8 +210,7 @@ export type CombinedTokenData = {
 	remoteTokens: TokenCounts;
 	totalTokens: TokenCounts;
 	remoteHostCount: number;
-	guidResponse?: GuidStatusResponse;
-	guidResponseV2?: GuidStatusResponseV2;
+	guidResponse?: GuidStatusResponseV2;
 };
 
 /**
@@ -414,11 +308,10 @@ export class ServerSubmissionManager implements Disposable {
 	private latestModelBreakdowns: SessionModelBreakdown[] | null = null;
 	private latestProjectData: ProjectData[] | null = null;
 	private remoteHostCount = 0;
-	private latestGuidResponse: GuidStatusResponse | null = null;
-	private latestGuidResponseV2: GuidStatusResponseV2 | null = null;
+	private latestGuidResponse: GuidStatusResponseV2 | null = null;
 	private isDisposed = false;
 	private readonly currentHostname = hostname();
-	private useV2Api = true; // Enable v2 API by default
+	private sessionEndTime: Date | null = null;
 
 	constructor(private readonly intervalMs: number = SUBMISSION_INTERVAL_MS) {}
 
@@ -447,30 +340,11 @@ export class ServerSubmissionManager implements Disposable {
 	 * Submit local data and fetch remote data
 	 */
 	private async submitAndFetch(): Promise<void> {
-		if (this.useV2Api && this.latestProjectData != null) {
-			// Use v2 API with project data
-			await submitProjectTokenUsage(this.latestProjectData);
+		if (this.latestProjectData != null) {
+			// Submit project data
+			await submitProjectTokenUsage(this.latestProjectData, this.sessionEndTime ?? undefined);
 
-			// Fetch v2 data with project detail
-			const remoteDataV2 = await fetchGuidEntriesV2();
-			if (remoteDataV2 != null) {
-				this.latestGuidResponseV2 = remoteDataV2;
-				
-				// Also fetch v1 data for backward compatibility
-				const remoteData = await fetchGuidEntries();
-				if (remoteData != null) {
-					this.latestGuidResponse = remoteData;
-					this.latestRemoteTokens = mergeRemoteTokens(remoteData, this.currentHostname);
-					this.remoteHostCount = remoteData.entries.filter(
-						entry => entry.hostname !== this.currentHostname,
-					).length;
-				}
-			}
-		}
-		else if (this.latestLocalTokens != null) {
-			// Fall back to v1 API
-			await submitTokenUsage(this.latestLocalTokens, this.latestModelBreakdowns ?? undefined);
-
+			// Fetch remote data
 			const remoteData = await fetchGuidEntries();
 			if (remoteData != null) {
 				this.latestGuidResponse = remoteData;
@@ -483,18 +357,13 @@ export class ServerSubmissionManager implements Disposable {
 	}
 
 	/**
-	 * Update local tokens for next submission (v1 backward compatible)
+	 * Update project data for next submission
 	 */
-	updateTokens(tokens: TokenCounts, modelBreakdowns?: SessionModelBreakdown[]): void {
-		this.latestLocalTokens = tokens;
-		this.latestModelBreakdowns = modelBreakdowns ?? null;
-	}
-
-	/**
-	 * Update project data for next submission (v2)
-	 */
-	updateProjectData(projectData: ProjectData[]): void {
+	updateProjectData(projectData: ProjectData[], sessionEndTime?: Date): void {
 		this.latestProjectData = projectData;
+		if (sessionEndTime != null) {
+			this.sessionEndTime = sessionEndTime;
+		}
 		
 		// Also update aggregated tokens for backward compatibility
 		const aggregated: TokenCounts = {
@@ -542,7 +411,6 @@ export class ServerSubmissionManager implements Disposable {
 			totalTokens: addTokenCounts(this.latestLocalTokens, remoteTokens),
 			remoteHostCount: this.remoteHostCount,
 			guidResponse: this.latestGuidResponse ?? undefined,
-			guidResponseV2: this.latestGuidResponseV2 ?? undefined,
 		};
 	}
 
@@ -592,30 +460,36 @@ if (import.meta.vitest != null) {
 		});
 
 		it('should exclude entries from the specified hostname', () => {
-			const remoteData: GuidStatusResponse = {
+			const remoteData: GuidStatusResponseV2 = {
 				guid: 'test-guid',
 				entries: [
 					{
 						hostname: 'host1',
-						tokens: {
-							inputTokens: 100,
-							outputTokens: 50,
-							cacheCreationTokens: 10,
-							cacheReadTokens: 5,
-							totalTokens: 165,
-						},
-						lastUpdated: new Date().toISOString(),
+						projects: [{
+							projectName: 'project1',
+							tokens: {
+								inputTokens: 100,
+								outputTokens: 50,
+								cacheCreationTokens: 10,
+								cacheReadTokens: 5,
+								totalTokens: 165,
+							},
+							lastUpdated: new Date().toISOString(),
+						}],
 					},
 					{
 						hostname: 'host2',
-						tokens: {
-							inputTokens: 200,
-							outputTokens: 100,
-							cacheCreationTokens: 20,
-							cacheReadTokens: 10,
-							totalTokens: 330,
-						},
-						lastUpdated: new Date().toISOString(),
+						projects: [{
+							projectName: 'project2',
+							tokens: {
+								inputTokens: 200,
+								outputTokens: 100,
+								cacheCreationTokens: 20,
+								cacheReadTokens: 10,
+								totalTokens: 330,
+							},
+							lastUpdated: new Date().toISOString(),
+						}],
 					},
 				],
 			};
@@ -630,41 +504,50 @@ if (import.meta.vitest != null) {
 		});
 
 		it('should sum tokens from all entries except excluded hostname', () => {
-			const remoteData: GuidStatusResponse = {
+			const remoteData: GuidStatusResponseV2 = {
 				guid: 'test-guid',
 				entries: [
 					{
 						hostname: 'host1',
-						tokens: {
-							inputTokens: 100,
-							outputTokens: 50,
-							cacheCreationTokens: 10,
-							cacheReadTokens: 5,
-							totalTokens: 165,
-						},
-						lastUpdated: new Date().toISOString(),
+						projects: [{
+							projectName: 'project1',
+							tokens: {
+								inputTokens: 100,
+								outputTokens: 50,
+								cacheCreationTokens: 10,
+								cacheReadTokens: 5,
+								totalTokens: 165,
+							},
+							lastUpdated: new Date().toISOString(),
+						}],
 					},
 					{
 						hostname: 'host2',
-						tokens: {
-							inputTokens: 200,
-							outputTokens: 100,
-							cacheCreationTokens: 20,
-							cacheReadTokens: 10,
-							totalTokens: 330,
-						},
-						lastUpdated: new Date().toISOString(),
+						projects: [{
+							projectName: 'project2',
+							tokens: {
+								inputTokens: 200,
+								outputTokens: 100,
+								cacheCreationTokens: 20,
+								cacheReadTokens: 10,
+								totalTokens: 330,
+							},
+							lastUpdated: new Date().toISOString(),
+						}],
 					},
 					{
 						hostname: 'host3',
-						tokens: {
-							inputTokens: 300,
-							outputTokens: 150,
-							cacheCreationTokens: 30,
-							cacheReadTokens: 15,
-							totalTokens: 495,
-						},
-						lastUpdated: new Date().toISOString(),
+						projects: [{
+							projectName: 'project3',
+							tokens: {
+								inputTokens: 300,
+								outputTokens: 150,
+								cacheCreationTokens: 30,
+								cacheReadTokens: 15,
+								totalTokens: 495,
+							},
+							lastUpdated: new Date().toISOString(),
+						}],
 					},
 				],
 			};
