@@ -81,8 +81,13 @@ def aggregate_tokens(existing: Dict[str, Any], new_data: Dict[str, Any]) -> Dict
     return existing
 
 
-def archive_to_historical(guid: str, hostname: str, project_name: str, project_data: Dict[str, Any]):
-    """Archive current data to historical storage."""
+def archive_to_historical(guid: str, hostname: str, project_name: str, project_data: Dict[str, Any], is_final: bool = False):
+    """Archive current data to historical storage.
+    
+    Args:
+        is_final: If True, aggregate with existing data (for expired sessions).
+                  If False, replace existing data (for active session updates).
+    """
     date_key = get_date_key(project_data.get('lastUpdated', ''))
     
     # Initialize nested structure if needed
@@ -93,23 +98,34 @@ def archive_to_historical(guid: str, hostname: str, project_name: str, project_d
     if hostname not in historical_data[guid][date_key]:
         historical_data[guid][date_key][hostname] = {}
     
+    # Calculate cost from model breakdowns if available
+    cost = 0
+    if 'modelBreakdowns' in project_data:
+        for mb in project_data['modelBreakdowns']:
+            cost += mb.get('cost', 0)
+    else:
+        # Fallback to simple calculation
+        cost = project_data['tokens']['totalTokens'] * 0.000003
+    
     # Prepare data for archiving (remove expiration)
     archive_data = {
         'tokens': project_data['tokens'],
         'lastUpdated': project_data['lastUpdated'],
-        'cost': project_data['tokens']['totalTokens'] * 0.000001  # Simplified cost calculation
+        'cost': cost
     }
     
     if 'modelBreakdowns' in project_data:
         archive_data['modelBreakdowns'] = project_data['modelBreakdowns']
     
-    # Aggregate with existing historical data
-    if project_name in historical_data[guid][date_key][hostname]:
+    # For active sessions, replace the data. For expired sessions, aggregate.
+    if is_final and project_name in historical_data[guid][date_key][hostname]:
+        # Aggregate with existing historical data (for expired sessions)
         historical_data[guid][date_key][hostname][project_name] = aggregate_tokens(
             historical_data[guid][date_key][hostname][project_name],
             archive_data
         )
     else:
+        # Replace existing data (for active sessions)
         historical_data[guid][date_key][hostname][project_name] = archive_data
 
 
@@ -132,8 +148,8 @@ def purge_expired_entries():
                     try:
                         expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
                         if current_time > expires_at:
-                            # Archive before removing
-                            archive_to_historical(guid, hostname, project_name, project_data)
+                            # Archive before removing (this is a final archive of expired session)
+                            archive_to_historical(guid, hostname, project_name, project_data, is_final=True)
                             projects_to_remove.append(project_name)
                             total_purged += 1
                             logging.info(f"Archiving and purging expired project: {guid}/{hostname}/{project_name}")
@@ -268,8 +284,8 @@ def update_v2():
             current_data[guid][hostname][project_name] = project_data
             updated_projects.append(project_name)
             
-            # Also update historical data for today
-            archive_to_historical(guid, hostname, project_name, project_data)
+            # Also update historical data for today (active session, so replace not aggregate)
+            archive_to_historical(guid, hostname, project_name, project_data, is_final=False)
         
         logging.info(f"Updated data for GUID: {guid}, hostname: {hostname}, projects: {updated_projects}")
         return jsonify({
@@ -660,19 +676,20 @@ DASHBOARD_HTML = '''<!doctype html>
 
 			.stats-grid {
 				display: grid;
-				grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-				gap: 20px;
+				grid-template-columns: repeat(7, 1fr);
+				gap: 15px;
 				margin-bottom: 40px;
 			}
 
 			.stat-card {
 				background: #1a1a2e;
-				padding: 24px;
+				padding: 20px;
 				border-radius: 12px;
 				border: 1px solid #2a2a3e;
 				transition:
 					transform 0.2s,
 					box-shadow 0.2s;
+				min-width: 0;
 			}
 
 			.stat-card:hover {
@@ -689,7 +706,7 @@ DASHBOARD_HTML = '''<!doctype html>
 			}
 
 			.stat-value {
-				font-size: 2em;
+				font-size: 1.6em;
 				font-weight: 600;
 				color: #fff;
 				margin-bottom: 4px;
@@ -861,11 +878,33 @@ DASHBOARD_HTML = '''<!doctype html>
 				margin-top: 30px;
 			}
 
+			@media (max-width: 1400px) {
+				.stats-grid {
+					grid-template-columns: repeat(4, 1fr);
+				}
+			}
+
+			@media (max-width: 1024px) {
+				.stats-grid {
+					grid-template-columns: repeat(3, 1fr);
+				}
+			}
+
 			@media (max-width: 768px) {
 				.hosts-projects {
 					grid-template-columns: 1fr;
 				}
 
+				.stats-grid {
+					grid-template-columns: repeat(2, 1fr);
+				}
+				
+				.stat-value {
+					font-size: 1.4em;
+				}
+			}
+
+			@media (max-width: 480px) {
 				.stats-grid {
 					grid-template-columns: 1fr;
 				}
