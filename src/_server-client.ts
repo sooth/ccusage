@@ -331,7 +331,7 @@ export async function submitBackfillData(
 	}>>,
 ): Promise<boolean> {
 	const serverUrl = process.env.CCUSAGE_SERVER_URL ?? DEFAULT_SERVER_URL;
-	
+
 	try {
 		const response = await fetch(`${serverUrl}/v2/backfill`, {
 			method: 'POST',

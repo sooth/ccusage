@@ -23,28 +23,43 @@
 This fork adds powerful new capabilities to ccusage:
 
 ### 🌐 Multi-Host Server Integration
-- **Centralized Usage Tracking**: Aggregate token usage across multiple machines
-- **Server Commands**: Use `--server` flag with daily/monthly/blocks commands to view aggregated data
+
+- **Centralized Usage Tracking**: Aggregate token usage across multiple machines via our hosted server at `soothaa.pythonanywhere.com`
+- **Server Commands**: Use `--server` flag with daily/monthly/blocks commands to view aggregated data from all your machines
 - **Automatic Synchronization**: Live monitoring automatically syncs data to server every 30 seconds
-- **Session Expiration**: Server automatically archives completed sessions for historical tracking
+- **Session Expiration**: Server automatically archives completed sessions (5-hour blocks) for historical tracking
+- **Privacy First**: Your data is identified only by a random GUID stored in `~/.ccusage-guid`
 
 ### 📤 Historical Data Backfill
+
 - **New `backfill` Command**: Upload all your historical usage data to the server
 - **Multi-Machine Aggregation**: Combine usage data from different computers
 - **Progress Tracking**: Visual progress bar during upload
 - **Dry Run Mode**: Test what would be uploaded with `--dry-run`
 
 ### 📊 Enhanced Token Tracking
+
 - **Complete Token Counts**: All displays now include cache creation and cache read tokens
 - **Accurate Monitoring**: Live monitoring shows true token usage including massive cache tokens
 - **Project-Level Breakdown**: See token usage broken down by project in live monitoring
 - **Token Type Details**: Detailed breakdown showing Input/Output/Cache Create/Cache Read for each project
 
 ### 🔧 Improved Monitoring
+
 - **Real-Time Updates**: Live dashboard updates every second with current usage
 - **Burn Rate Projections**: See token consumption rate and cost projections
 - **Multi-Project Support**: Track multiple Claude projects simultaneously
 - **Responsive Display**: Automatically adjusts to terminal width
+
+### 🎨 Web Dashboard
+
+- **Beautiful Web UI**: Access your usage dashboard at `https://soothaa.pythonanywhere.com/{YOUR_GUID}`
+- **Real-Time Statistics**: View total tokens, costs, active hosts, and projects
+- **7-Day Chart**: Visual representation of your token usage over the past week
+- **Token Breakdown**: See Input/Output/Cache Create/Cache Read tokens for each project
+- **Auto-Refresh**: Dashboard updates every 30 seconds with latest data
+- **Dark Theme**: Easy on the eyes with gradient styling
+- **Mobile Responsive**: Works perfectly on all device sizes
 
 ## Installation
 
@@ -65,8 +80,9 @@ npm install -g ccusage
 ### Download Binary
 
 Download pre-built binaries from [Releases](https://github.com/sooth/ccusage/releases/latest):
+
 - Linux x64
-- macOS x64 
+- macOS x64
 - macOS ARM64
 
 ## Usage
@@ -86,21 +102,46 @@ ccusage blocks --live         # Real-time usage dashboard
 ccusage blocks-monitor        # Continuous monitoring with server sync
 ```
 
-### Server Integration
+### Server Integration & Web Dashboard
+
+Our hosted server at `soothaa.pythonanywhere.com` provides centralized tracking across all your machines.
+
+#### Accessing Your Web Dashboard
+
+1. Find your GUID:
+
+   ```bash
+   cat ~/.ccusage-guid
+   ```
+
+2. Visit your personal dashboard:
+   ```
+   https://soothaa.pythonanywhere.com/{YOUR_GUID}
+   ```
+
+#### Server Commands
 
 ```bash
-# Set server URL (optional, defaults to https://soothaa.pythonanywhere.com)
-export CCUSAGE_SERVER_URL=https://your-server.com
+# View aggregated data from all your machines
+ccusage daily --server      # Combined daily usage
+ccusage monthly --server    # Combined monthly usage
+ccusage blocks --server     # Combined billing blocks
 
-# View aggregated data from server
-ccusage daily --server
-ccusage monthly --server
-ccusage blocks --server
-
-# Upload historical data
+# Upload your historical data to the server
 ccusage backfill --server
-ccusage backfill --server --dry-run  # Test without uploading
+ccusage backfill --server --dry-run  # Preview what would be uploaded
+ccusage backfill --server --verbose  # See detailed progress
+
+# Live monitoring with automatic server sync
+ccusage blocks-monitor      # Syncs every 30 seconds
 ```
+
+#### Privacy & Data
+
+- Your data is identified only by a random GUID (no personal information)
+- The GUID is stored locally in `~/.ccusage-guid`
+- Server URL defaults to `https://soothaa.pythonanywhere.com`
+- Override with: `export CCUSAGE_SERVER_URL=https://your-server.com`
 
 ### Filters and Options
 
@@ -125,8 +166,9 @@ ccusage daily --mode auto         # Smart mode (default)
 - 💬 **Session Report**: View usage grouped by conversation sessions
 - ⏰ **5-Hour Blocks Report**: Track usage within Claude's billing windows with active block monitoring
 - 📈 **Live Monitoring**: Real-time dashboard showing active session progress, token burn rate, and cost projections
-- 🌐 **Multi-Host Support**: Aggregate usage data across multiple machines via server
-- 📤 **Historical Backfill**: Upload existing local data to server for aggregation
+- 🌐 **Multi-Host Support**: Aggregate usage data across multiple machines via our hosted server
+- 🎨 **Web Dashboard**: Beautiful web UI at `soothaa.pythonanywhere.com/{GUID}` with real-time updates
+- 📤 **Historical Backfill**: Upload existing local data to server for cross-machine aggregation
 - 🤖 **Model Tracking**: See which Claude models you're using (Opus, Sonnet, etc.)
 - 📊 **Model Breakdown**: View per-model cost breakdown with `--breakdown` flag
 - 📁 **Multi-Directory Support**: Automatically finds Claude data in both `~/.claude` and `~/.config/claude`
@@ -134,7 +176,7 @@ ccusage daily --mode auto         # Smart mode (default)
 - 📋 **Project-Level Tracking**: See token usage broken down by individual projects
 - 💰 **Cost Tracking**: Shows costs in USD for each day/month/session
 - 🔄 **Cache Token Support**: Tracks and displays all token types including cache tokens
-- 🌐 **Offline Mode**: Use pre-cached pricing data without network connectivity
+- 🌐 **Automatic Server Sync**: Live monitoring syncs to server every 30 seconds
 - 🔌 **MCP Integration**: Built-in Model Context Protocol server for integration with other tools
 
 ## Documentation

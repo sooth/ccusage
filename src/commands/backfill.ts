@@ -1,12 +1,11 @@
-import os from "node:os";
-import process from "node:process";
-import { define } from "gunshi";
-import { logger } from "../logger.ts";
-import { loadDailyUsageData } from "../data-loader.ts";
-import { createDailyDate } from "../_types.ts";
-import { sharedCommandConfig } from "../_shared-args.ts";
-import { submitBackfillData, getGuid, getServerUrl } from "../_server-client.ts";
-import ProgressBar from "progress";
+import os from 'node:os';
+import process from 'node:process';
+import { define } from 'gunshi';
+import ProgressBar from 'progress';
+import { getGuid, getServerUrl, submitBackfillData } from '../_server-client.ts';
+import { sharedCommandConfig } from '../_shared-args.ts';
+import { loadDailyUsageData } from '../data-loader.ts';
+import { logger } from '../logger.ts';
 
 /**
  * Backfill command - uploads historical usage data to the server
@@ -23,7 +22,7 @@ export const backfillCommand = define({
 			description: 'Show what would be uploaded without actually uploading',
 		},
 		verbose: {
-			type: 'boolean', 
+			type: 'boolean',
 			default: false,
 			description: 'Show detailed information about the backfill process',
 		},
@@ -33,43 +32,43 @@ export const backfillCommand = define({
 			// Get configuration from context
 			const dryRun = ctx.values.dryRun;
 			const verbose = ctx.values.verbose;
-			
+
 			// Check if server mode is enabled
 			if (!ctx.values.server) {
-				logger.error("Backfill requires --server flag to be enabled");
-				logger.info("Usage: ccusage backfill --server [--dry-run] [--verbose]");
+				logger.error('Backfill requires --server flag to be enabled');
+				logger.info('Usage: ccusage backfill --server [--dry-run] [--verbose]');
 				process.exit(1);
 			}
-			
+
 			// Get GUID and server URL from server client module
 			const guidValue = getGuid();
 			const serverUrlValue = getServerUrl();
-			
+
 			// Get hostname for submission
 			const hostname = os.hostname();
-			
-			logger.info("Starting backfill process...");
+
+			logger.info('Starting backfill process...');
 			logger.info(`GUID: ${guidValue}`);
 			logger.info(`Hostname: ${hostname}`);
 			logger.info(`Server: ${serverUrlValue}`);
 			if (dryRun) {
-				logger.info("DRY RUN MODE - No data will be uploaded");
+				logger.info('DRY RUN MODE - No data will be uploaded');
 			}
-			
+
 			// Load all local daily usage data (without date filters to get all historical data)
-			logger.info("Loading local usage data...");
+			logger.info('Loading local usage data...');
 			const dailyData = await loadDailyUsageData({
 				mode: 'calculate', // Always calculate costs from tokens for consistency
 				offline: true, // Don't fetch from server since we're uploading TO server
 			});
-			
+
 			if (dailyData.length === 0) {
-				logger.info("No usage data found to backfill");
+				logger.info('No usage data found to backfill');
 				return;
 			}
-			
+
 			logger.info(`Found ${dailyData.length} days of usage data`);
-			
+
 			// Convert daily data to the format expected by the backfill endpoint
 			// Structure: { date: { projectName: { tokens, modelBreakdowns, cost } } }
 			const historicalData: Record<string, Record<string, {
@@ -90,15 +89,15 @@ export const backfillCommand = define({
 				}>;
 				cost: number;
 			}>> = {};
-			
+
 			// Process each day's data
 			for (const dayData of dailyData) {
 				const dateKey = dayData.date;
-				
+
 				// For now, aggregate all data under a single "default" project
 				// TODO: In the future, we could enhance this to track individual projects
-				const projectName = "default";
-				
+				const projectName = 'default';
+
 				historicalData[dateKey] = {
 					[projectName]: {
 						tokens: {
@@ -106,8 +105,8 @@ export const backfillCommand = define({
 							outputTokens: dayData.outputTokens,
 							cacheCreationTokens: dayData.cacheCreationTokens,
 							cacheReadTokens: dayData.cacheReadTokens,
-							totalTokens: dayData.inputTokens + dayData.outputTokens + 
-							           dayData.cacheCreationTokens + dayData.cacheReadTokens,
+							totalTokens: dayData.inputTokens + dayData.outputTokens
+								+ dayData.cacheCreationTokens + dayData.cacheReadTokens,
 						},
 						modelBreakdowns: dayData.modelBreakdowns.map(mb => ({
 							modelName: mb.modelName,
@@ -121,29 +120,31 @@ export const backfillCommand = define({
 					},
 				};
 			}
-			
+
 			// Count totals for reporting
 			const totalDates = Object.keys(historicalData).length;
 			let totalProjects = 0;
 			for (const projects of Object.values(historicalData)) {
-				if (projects) {
+				if (projects != null) {
 					totalProjects += Object.keys(projects).length;
 				}
 			}
-			
+
 			logger.info(`Aggregated data: ${totalDates} dates, ${totalProjects} total project entries`);
-			
+
 			if (verbose) {
 				// Show summary of what will be uploaded
-				logger.info("\nData summary by date:");
+				logger.info('\nData summary by date:');
 				const sortedDates = Object.keys(historicalData).sort();
 				for (const date of sortedDates.slice(0, 10)) {
 					const projects = historicalData[date];
-					if (!projects) continue;
+					if (projects == null) {
+						continue;
+					}
 					const projectCount = Object.keys(projects).length;
 					let totalTokens = 0;
 					for (const project of Object.values(projects)) {
-						if (project) {
+						if (project != null) {
 							totalTokens += project.tokens.totalTokens;
 						}
 					}
@@ -153,72 +154,73 @@ export const backfillCommand = define({
 					logger.info(`  ... and ${sortedDates.length - 10} more dates`);
 				}
 			}
-			
+
 			if (dryRun) {
-				logger.info("\nDRY RUN COMPLETE - No data was uploaded");
+				logger.info('\nDRY RUN COMPLETE - No data was uploaded');
 				logger.info(`Would have uploaded: ${totalDates} dates with ${totalProjects} project entries`);
 				return;
 			}
-			
+
 			// Submit data in chunks to avoid overwhelming the server
 			const CHUNK_SIZE = 30; // Submit 30 days at a time
 			const dateKeys = Object.keys(historicalData).sort();
 			const totalChunks = Math.ceil(dateKeys.length / CHUNK_SIZE);
-			
+
 			logger.info(`\nUploading data in ${totalChunks} chunks...`);
-			
+
 			// Create progress bar
-			const progressBar = new ProgressBar("Uploading [:bar] :percent :current/:total chunks", {
+			const progressBar = new ProgressBar('Uploading [:bar] :percent :current/:total chunks', {
 				total: totalChunks,
 				width: 40,
-				complete: "=",
-				incomplete: " ",
+				complete: '=',
+				incomplete: ' ',
 			});
-			
+
 			let successfulChunks = 0;
 			let failedChunks = 0;
-			
+
 			for (let i = 0; i < dateKeys.length; i += CHUNK_SIZE) {
 				const chunkDates = dateKeys.slice(i, i + CHUNK_SIZE);
 				const chunkData: typeof historicalData = {};
-				
+
 				// Build chunk data
 				for (const date of chunkDates) {
 					const dateData = historicalData[date];
-					if (dateData) {
+					if (dateData != null) {
 						chunkData[date] = dateData;
 					}
 				}
-				
+
 				// Submit chunk
 				const result = await submitBackfillData(guidValue, hostname, chunkData);
-				
-				if (result) {
+
+				if (result === true) {
 					successfulChunks++;
-				} else {
+				}
+				else {
 					failedChunks++;
 					if (verbose) {
 						logger.error(`Failed to upload chunk ${Math.floor(i / CHUNK_SIZE) + 1}`);
 					}
 				}
-				
+
 				progressBar.tick();
 			}
-			
+
 			// Report results
-			logger.info("\n\nBackfill complete!");
+			logger.info('\n\nBackfill complete!');
 			logger.info(`Successfully uploaded: ${successfulChunks} chunks`);
 			if (failedChunks > 0) {
 				logger.error(`Failed chunks: ${failedChunks}`);
-				logger.info("Some data may not have been uploaded. Please check server logs.");
-			} else {
-				logger.info("All historical data has been uploaded successfully!");
+				logger.info('Some data may not have been uploaded. Please check server logs.');
 			}
-			
-		} catch (error) {
-			logger.error("Backfill failed:", error);
+			else {
+				logger.info('All historical data has been uploaded successfully!');
+			}
+		}
+		catch (error) {
+			logger.error('Backfill failed:', error);
 			process.exit(1);
 		}
 	},
 });
-
