@@ -81,12 +81,13 @@ def aggregate_tokens(existing: Dict[str, Any], new_data: Dict[str, Any]) -> Dict
     return existing
 
 
-def archive_to_historical(guid: str, hostname: str, project_name: str, project_data: Dict[str, Any], is_final: bool = False):
+def archive_to_historical(guid: str, hostname: str, project_name: str, project_data: Dict[str, Any], is_final: bool = True):
     """Archive current data to historical storage.
     
     Args:
-        is_final: If True, aggregate with existing data (for expired sessions).
-                  If False, replace existing data (for active session updates).
+        is_final: Should always be True. Archives expired session data by aggregating 
+                  with any existing historical data for the same project/date.
+                  This prevents data loss when multiple sessions occur on the same day.
     """
     date_key = get_date_key(project_data.get('lastUpdated', ''))
     
@@ -284,8 +285,8 @@ def update_v2():
             current_data[guid][hostname][project_name] = project_data
             updated_projects.append(project_name)
             
-            # Also update historical data for today (active session, so replace not aggregate)
-            archive_to_historical(guid, hostname, project_name, project_data, is_final=False)
+            # Don't archive to historical during active sessions - only archive when session expires
+            # This prevents double-counting when the session later expires and gets archived again
         
         logging.info(f"Updated data for GUID: {guid}, hostname: {hostname}, projects: {updated_projects}")
         return jsonify({
