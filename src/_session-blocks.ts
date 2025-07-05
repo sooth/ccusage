@@ -1,5 +1,6 @@
 import { uniq } from 'es-toolkit';
 import { DEFAULT_RECENT_DAYS } from './_consts.ts';
+import { getTotalTokens } from './_token-utils.ts';
 
 /**
  * Default session duration in hours (Claude's billing block duration)
@@ -32,6 +33,7 @@ export type LoadedUsageEntry = {
 	model: string;
 	version?: string;
 	projectPath?: string;
+	usageLimitResetTime?: Date; // Claude API usage limit reset time
 };
 
 /**
@@ -72,6 +74,7 @@ export type SessionBlock = {
 	models: string[];
 	modelBreakdowns: SessionModelBreakdown[];
 	projects?: string[]; // Unique project paths in this block
+	usageLimitResetTime?: Date; // Claude API usage limit reset time
 };
 
 /**
@@ -189,6 +192,7 @@ function createBlock(startTime: Date, entries: LoadedUsageEntry[], now: Date, se
 	let costUSD = 0;
 	const models: string[] = [];
 	const projects: string[] = [];
+	let usageLimitResetTime: Date | undefined;
 
 	// Track per-model stats
 	const modelStats = new Map<string, SessionModelBreakdown>();
@@ -199,6 +203,7 @@ function createBlock(startTime: Date, entries: LoadedUsageEntry[], now: Date, se
 		tokenCounts.cacheCreationInputTokens += entry.usage.cacheCreationInputTokens;
 		tokenCounts.cacheReadInputTokens += entry.usage.cacheReadInputTokens;
 		costUSD += entry.costUSD ?? 0;
+		usageLimitResetTime = entry.usageLimitResetTime ?? usageLimitResetTime;
 		models.push(entry.model);
 
 		// Track project
@@ -238,6 +243,7 @@ function createBlock(startTime: Date, entries: LoadedUsageEntry[], now: Date, se
 		models: uniq(models),
 		modelBreakdowns: Array.from(modelStats.values()),
 		projects: uniq(projects),
+		usageLimitResetTime,
 	};
 }
 
@@ -274,6 +280,7 @@ function createGapBlock(lastActivityTime: Date, nextActivityTime: Date, sessionD
 		costUSD: 0,
 		models: [],
 		modelBreakdowns: [],
+		usageLimitResetTime: undefined,
 	};
 }
 
@@ -301,8 +308,7 @@ export function calculateBurnRate(block: SessionBlock): BurnRate | null {
 		return null;
 	}
 
-	const totalTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens
-		+ block.tokenCounts.cacheCreationInputTokens + block.tokenCounts.cacheReadInputTokens;
+	const totalTokens = getTotalTokens(block.tokenCounts);
 	const tokensPerMinute = totalTokens / durationMinutes;
 	const costPerHour = (block.costUSD / durationMinutes) * 60;
 
@@ -331,8 +337,7 @@ export function projectBlockUsage(block: SessionBlock): ProjectedUsage | null {
 	const remainingTime = block.endTime.getTime() - now.getTime();
 	const remainingMinutes = Math.max(0, remainingTime / (1000 * 60));
 
-	const currentTokens = block.tokenCounts.inputTokens + block.tokenCounts.outputTokens
-		+ block.tokenCounts.cacheCreationInputTokens + block.tokenCounts.cacheReadInputTokens;
+	const currentTokens = getTotalTokens(block.tokenCounts);
 	const projectedAdditionalTokens = burnRate.tokensPerMinute * remainingMinutes;
 	const totalTokens = currentTokens + projectedAdditionalTokens;
 

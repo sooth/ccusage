@@ -65,13 +65,24 @@ This fork adds powerful new capabilities to ccusage:
 
 ### Quick Start (Recommended)
 
-Run directly without installation:
+Thanks to ccusage's incredibly small bundle size ([![install size](https://packagephobia.com/badge?p=ccusage)](https://packagephobia.com/result?p=ccusage)), you can run it directly without installation:
 
 ```bash
+# Using bunx (recommended for speed)
+bunx ccusage
+
+# Using npx
 npx ccusage@latest
+
+# Using deno (with security flags)
+deno run -E -R=$HOME/.claude/projects/ -S=homedir -N='raw.githubusercontent.com:443' npm:ccusage@latest
 ```
 
-### Local Installation
+> 💡 **Tip**: We recommend using `bunx` instead of `npx` for a massive speed improvement!
+
+### Local Installation (Optional)
+
+Since ccusage has such a small bundle size, installation is entirely optional:
 
 ```bash
 npm install -g ccusage
@@ -178,11 +189,39 @@ ccusage daily --mode auto         # Smart mode (default)
 - 🔄 **Cache Token Support**: Tracks and displays all token types including cache tokens
 - 🌐 **Automatic Server Sync**: Live monitoring syncs to server every 30 seconds
 - 🔌 **MCP Integration**: Built-in Model Context Protocol server for integration with other tools
+- 🚀 **Ultra-Small Bundle**: Unlike other CLI tools, we pay extreme attention to bundle size - incredibly small even without minification!
 
 ## Documentation
 
 Full documentation is available at **[ccusage.com](https://ccusage.com/)**
 
+## Sponsors
+
+### Featured Sponsor
+
+Check out these [47 Claude Code ProTips from Greg Baugues.](https://www.youtube.com/watch?v=TiNpzxoBPz0&lc=UgyVgQyOhfJJlheVMcB4AaABAg)
+
+<p align="center">
+    <a href="https://www.youtube.com/watch?v=TiNpzxoBPz0&lc=UgyVgQyOhfJJlheVMcB4AaABAg">
+        <img src="https://cdn.jsdelivr.net/gh/ryoppippi/ccusage@main/docs/public/claude_code_protips_thumbnail_v1.png" alt="47 Claude Code ProTips from Greg Baugues" width="600">
+    </a>
+</p>
+
+<p align="center">
+    <a href="https://github.com/sponsors/ryoppippi">
+        <img src="https://cdn.jsdelivr.net/gh/ryoppippi/sponsors@main/sponsors.svg">
+    </a>
+</p>
+
+## Star History
+
+<a href="https://www.star-history.com/#ryoppippi/ccusage&Date">
+    <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=ryoppippi/ccusage&type=Date&theme=dark" />
+        <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=ryoppippi/ccusage&type=Date" />
+        <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=ryoppippi/ccusage&type=Date" />
+    </picture>
+</a>
 ## License
 
 [MIT](LICENSE) © [@ryoppippi](https://github.com/ryoppippi)

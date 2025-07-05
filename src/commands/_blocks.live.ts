@@ -8,6 +8,7 @@
 
 import type { LiveMonitoringConfig } from '../_live-rendering.ts';
 import process from 'node:process';
+import { Result } from '@praha/byethrow';
 import pc from 'picocolors';
 import { MIN_RENDER_INTERVAL_MS } from '../_consts.ts';
 import { LiveMonitor } from '../_live-monitor.ts';
@@ -57,7 +58,7 @@ export async function startLiveMonitoring(config: LiveMonitoringConfig): Promise
 		order: config.order,
 	});
 
-	try {
+	const monitoringResult = await Result.try(async () => {
 		while (!abortController.signal.aborted) {
 			const now = Date.now();
 			const timeSinceLastRender = now - lastRenderTime;
@@ -92,8 +93,10 @@ export async function startLiveMonitoring(config: LiveMonitoringConfig): Promise
 			// Wait before next refresh
 			await delayWithAbort(config.refreshInterval, abortController.signal);
 		}
-	}
-	catch (error) {
+	});
+
+	if (Result.isFailure(monitoringResult)) {
+		const error = monitoringResult.error;
 		if ((error instanceof DOMException || error instanceof Error) && error.name === 'AbortError') {
 			return; // Normal graceful shutdown
 		}
