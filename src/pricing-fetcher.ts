@@ -378,7 +378,7 @@ if (import.meta.vitest != null) {
 						input_tokens: 1000,
 						output_tokens: 500,
 					},
-					pricing!,
+					pricing,
 				);
 
 				expect(cost).toBeGreaterThan(0);
@@ -396,7 +396,7 @@ if (import.meta.vitest != null) {
 						cache_creation_input_tokens: 200,
 						cache_read_input_tokens: 300,
 					},
-					pricing!,
+					pricing,
 				);
 
 				const expectedCost
@@ -424,7 +424,7 @@ if (import.meta.vitest != null) {
 						input_tokens: 1000,
 						output_tokens: 500,
 					},
-					pricing!,
+					pricing,
 				);
 
 				expect(cost).toBeGreaterThan(0);
@@ -442,7 +442,7 @@ if (import.meta.vitest != null) {
 						cache_creation_input_tokens: 200,
 						cache_read_input_tokens: 300,
 					},
-					pricing!,
+					pricing,
 				);
 
 				const expectedCost

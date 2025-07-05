@@ -1,678 +1,728 @@
 <!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Claude Usage Dashboard</title>
-    
-    <!-- Bootstrap 5.3 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
-    
-    <style>
-        :root {
-            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --dark-bg: #0a0a0a;
-            --card-bg: #1a1a2e;
-            --card-border: #2a2a3e;
-            --text-muted: #6c757d;
-            --success-color: #4ade80;
-            --warning-color: #fbbf24;
-        }
-        
-        body {
-            background: var(--dark-bg);
-            color: #e0e0e0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            min-height: 100vh;
-        }
-        
-        .navbar {
-            background: var(--card-bg);
-            border-bottom: 1px solid var(--card-border);
-            padding: 1.5rem 0;
-        }
-        
-        .navbar-brand {
-            font-size: 1.75rem;
-            font-weight: 300;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin: 0;
-        }
-        
-        .container-fluid {
-            max-width: 1600px;
-        }
-        
-        /* Stats Cards */
-        .stats-row {
-            margin-bottom: 2rem;
-        }
-        
-        .stat-card {
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 0.75rem;
-            padding: 1.25rem;
-            height: 100%;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .stat-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: var(--primary-gradient);
-            transform: translateX(-100%);
-            transition: transform 0.3s ease;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.15);
-        }
-        
-        .stat-card:hover::before {
-            transform: translateX(0);
-        }
-        
-        .stat-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 0.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.25rem;
-            margin-bottom: 0.75rem;
-        }
-        
-        .stat-icon.tokens { background: rgba(102, 126, 234, 0.2); color: #667eea; }
-        .stat-icon.cost { background: rgba(74, 222, 128, 0.2); color: var(--success-color); }
-        .stat-icon.session { background: rgba(251, 191, 36, 0.2); color: var(--warning-color); }
-        .stat-icon.hosts { background: rgba(236, 72, 153, 0.2); color: #ec4899; }
-        .stat-icon.projects { background: rgba(79, 172, 254, 0.2); color: #4facfe; }
-        
-        .stat-label {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 0.25rem;
-        }
-        
-        .stat-value {
-            font-size: 1.75rem;
-            font-weight: 600;
-            line-height: 1;
-            margin-bottom: 0.25rem;
-        }
-        
-        .stat-value.cost { color: var(--success-color); }
-        .stat-value.countdown { 
-            color: var(--warning-color); 
-            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
-        }
-        
-        .stat-subtitle {
-            font-size: 0.8125rem;
-            color: var(--text-muted);
-        }
-        
-        /* Chart Section */
-        .chart-card {
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-        }
-        
-        .chart-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-        }
-        
-        .chart-title {
-            font-size: 1.125rem;
-            font-weight: 500;
-            margin: 0;
-        }
-        
-        .chart-container {
-            height: 300px;
-            position: relative;
-        }
-        
-        .chart-bars {
-            display: flex;
-            align-items: flex-end;
-            height: 100%;
-            gap: 0.5rem;
-            padding: 0 0.5rem;
-        }
-        
-        .chart-bar {
-            flex: 1;
-            background: var(--primary-gradient);
-            border-radius: 0.25rem 0.25rem 0 0;
-            position: relative;
-            min-height: 4px;
-            transition: opacity 0.2s;
-            cursor: pointer;
-        }
-        
-        .chart-bar:hover {
-            opacity: 0.8;
-        }
-        
-        .chart-bar-label {
-            position: absolute;
-            bottom: -30px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            white-space: nowrap;
-        }
-        
-        /* Lists Section */
-        .list-card {
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-            height: 100%;
-        }
-        
-        .list-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.25rem;
-        }
-        
-        .list-title {
-            font-size: 1.125rem;
-            font-weight: 500;
-            margin: 0;
-        }
-        
-        .list-badge {
-            background: var(--primary-gradient);
-            color: white;
-            padding: 0.25rem 0.75rem;
-            border-radius: 2rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-        }
-        
-        .list-item {
-            background: rgba(15, 15, 30, 0.5);
-            border: 1px solid var(--card-border);
-            border-radius: 0.5rem;
-            padding: 1rem;
-            margin-bottom: 0.75rem;
-            transition: all 0.2s;
-        }
-        
-        .list-item:hover {
-            background: rgba(15, 15, 30, 0.8);
-            border-color: rgba(102, 126, 234, 0.3);
-        }
-        
-        .list-item:last-child {
-            margin-bottom: 0;
-        }
-        
-        .list-item-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: start;
-            margin-bottom: 0.5rem;
-        }
-        
-        .list-item-name {
-            font-weight: 500;
-            word-break: break-word;
-        }
-        
-        .list-item-stats {
-            display: flex;
-            gap: 1.5rem;
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            flex-wrap: wrap;
-        }
-        
-        .token-stat {
-            display: flex;
-            align-items: center;
-            gap: 0.375rem;
-        }
-        
-        .token-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-        }
-        
-        .token-dot.input { background: #667eea; }
-        .token-dot.output { background: #764ba2; }
-        .token-dot.cache-create { background: #f093fb; }
-        .token-dot.cache-read { background: #4facfe; }
-        
-        /* Loading and Error States */
-        .loading-container {
-            text-align: center;
-            padding: 4rem 2rem;
-        }
-        
-        .spinner-border {
-            width: 3rem;
-            height: 3rem;
-            border-width: 0.25rem;
-        }
-        
-        .error-alert {
-            background: rgba(220, 53, 69, 0.1);
-            border: 1px solid rgba(220, 53, 69, 0.3);
-            color: #f8d7da;
-        }
-        
-        /* Responsive */
-        @media (max-width: 1400px) {
-            .stat-value { font-size: 1.5rem; }
-        }
-        
-        @media (max-width: 992px) {
-            .stat-value { font-size: 1.75rem; }
-            .stats-row .col-lg { margin-bottom: 1rem; }
-        }
-        
-        /* Utilities */
-        .text-muted { color: var(--text-muted) !important; }
-        .small { font-size: 0.875rem; }
-    </style>
-</head>
-<body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-dark">
-        <div class="container-fluid">
-            <h1 class="navbar-brand mb-0">
-                <i class="bi bi-lightning-charge-fill me-2"></i>
-                Claude Usage Dashboard
-            </h1>
-            <span class="text-muted small">Real-time token usage and cost tracking</span>
-        </div>
-    </nav>
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Claude Usage Dashboard</title>
 
-    <!-- Main Container -->
-    <div class="container-fluid py-4">
-        <!-- Loading State -->
-        <div id="loading" class="loading-container">
-            <div class="spinner-border text-primary mb-3" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="text-muted">Loading dashboard data...</p>
-        </div>
+		<!-- Bootstrap 5.3 CSS -->
+		<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+		<!-- Bootstrap Icons -->
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css" />
 
-        <!-- Error State -->
-        <div id="error" class="alert error-alert d-none" role="alert">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-            <span id="errorMessage">Error loading data</span>
-        </div>
+		<style>
+			:root {
+				--primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+				--dark-bg: #0a0a0a;
+				--card-bg: #1a1a2e;
+				--card-border: #2a2a3e;
+				--text-muted: #6c757d;
+				--success-color: #4ade80;
+				--warning-color: #fbbf24;
+			}
 
-        <!-- Dashboard Content -->
-        <div id="dashboard" class="d-none">
-            <!-- Stats Cards -->
-            <div class="row stats-row g-3">
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon tokens">
-                            <i class="bi bi-coin"></i>
-                        </div>
-                        <div class="stat-label">Total Tokens Today</div>
-                        <div class="stat-value" id="totalTokens">0</div>
-                        <div class="stat-subtitle" id="tokenBreakdown">Loading...</div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon cost">
-                            <i class="bi bi-currency-dollar"></i>
-                        </div>
-                        <div class="stat-label">Total Cost Today</div>
-                        <div class="stat-value cost" id="totalCost">$0.00</div>
-                        <div class="stat-subtitle">USD</div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon cost">
-                            <i class="bi bi-clock-history"></i>
-                        </div>
-                        <div class="stat-label">Current Session Cost</div>
-                        <div class="stat-value cost" id="sessionCost">$0.00</div>
-                        <div class="stat-subtitle">Since session start</div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon session">
-                            <i class="bi bi-hourglass-split"></i>
-                        </div>
-                        <div class="stat-label">Session Ends In</div>
-                        <div class="stat-value countdown" id="sessionCountdown">--:--:--</div>
-                        <div class="stat-subtitle" id="sessionEndTime">Calculating...</div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon cost">
-                            <i class="bi bi-calendar-month"></i>
-                        </div>
-                        <div class="stat-label">Total Cost This Month</div>
-                        <div class="stat-value cost" id="monthCost">$0.00</div>
-                        <div class="stat-subtitle" id="monthName">Loading...</div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon hosts">
-                            <i class="bi bi-pc-display"></i>
-                        </div>
-                        <div class="stat-label">Active Hosts</div>
-                        <div class="stat-value" id="hostCount">0</div>
-                        <div class="stat-subtitle">machines reporting</div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon projects">
-                            <i class="bi bi-folder2-open"></i>
-                        </div>
-                        <div class="stat-label">Active Projects</div>
-                        <div class="stat-value" id="projectCount">0</div>
-                        <div class="stat-subtitle">unique projects</div>
-                    </div>
-                </div>
-            </div>
+			body {
+				background: var(--dark-bg);
+				color: #e0e0e0;
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+				min-height: 100vh;
+			}
 
-            <!-- Chart -->
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h2 class="chart-title">
-                        <i class="bi bi-graph-up me-2"></i>
-                        Token Usage - Last 7 Days
-                    </h2>
-                    <span class="text-muted small">Daily totals</span>
-                </div>
-                <div class="chart-container">
-                    <div class="chart-bars" id="dailyChart"></div>
-                </div>
-            </div>
+			.navbar {
+				background: var(--card-bg);
+				border-bottom: 1px solid var(--card-border);
+				padding: 1.5rem 0;
+			}
 
-            <!-- Lists -->
-            <div class="row g-3">
-                <div class="col-12 col-lg-4">
-                    <div class="list-card">
-                        <div class="list-header">
-                            <h3 class="list-title">
-                                <i class="bi bi-hdd-network me-2"></i>
-                                Active Hosts
-                            </h3>
-                            <span class="list-badge" id="hostBadge">0</span>
-                        </div>
-                        <div id="hostsList"></div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-lg-8">
-                    <div class="list-card">
-                        <div class="list-header">
-                            <h3 class="list-title">
-                                <i class="bi bi-folder-fill me-2"></i>
-                                Projects
-                            </h3>
-                            <span class="list-badge" id="projectBadge">0</span>
-                        </div>
-                        <div id="projectsList"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Footer -->
-            <div class="text-center mt-4">
-                <p class="text-muted small mb-0" id="lastUpdated">Last updated: Never</p>
-            </div>
-        </div>
-    </div>
+			.navbar-brand {
+				font-size: 1.75rem;
+				font-weight: 300;
+				background: var(--primary-gradient);
+				-webkit-background-clip: text;
+				-webkit-text-fill-color: transparent;
+				margin: 0;
+			}
 
-    <!-- Bootstrap JS (optional, but includes Popper for tooltips) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <script>
-        const guid = window.location.pathname.substring(1);
-        const apiBase = window.location.origin;
+			.container-fluid {
+				max-width: 1600px;
+			}
 
-        function formatNumber(num) {
-            if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
-            if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-            if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
-            return num.toLocaleString();
-        }
+			/* Stats Cards */
+			.stats-row {
+				margin-bottom: 2rem;
+			}
 
-        function formatCost(cost) {
-            return '$' + cost.toFixed(2);
-        }
+			.stat-card {
+				background: var(--card-bg);
+				border: 1px solid var(--card-border);
+				border-radius: 0.75rem;
+				padding: 1.25rem;
+				height: 100%;
+				transition: all 0.3s ease;
+				position: relative;
+				overflow: hidden;
+			}
 
-        function calculateSessionEnd() {
-            const now = new Date();
-            const utcHour = now.getUTCHours();
-            const nextBoundary = Math.ceil(utcHour / 5) * 5;
-            
-            const sessionEnd = new Date(now);
-            sessionEnd.setUTCHours(nextBoundary, 0, 0, 0);
-            
-            if (nextBoundary >= 24) {
-                sessionEnd.setUTCDate(sessionEnd.getUTCDate() + 1);
-                sessionEnd.setUTCHours(nextBoundary % 24, 0, 0, 0);
-            }
-            
-            return sessionEnd;
-        }
+			.stat-card::before {
+				content: '';
+				position: absolute;
+				top: 0;
+				left: 0;
+				right: 0;
+				height: 3px;
+				background: var(--primary-gradient);
+				transform: translateX(-100%);
+				transition: transform 0.3s ease;
+			}
 
-        function formatCountdown(milliseconds) {
-            const totalSeconds = Math.floor(milliseconds / 1000);
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const seconds = totalSeconds % 60;
-            
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        }
+			.stat-card:hover {
+				transform: translateY(-2px);
+				box-shadow: 0 8px 30px rgba(102, 126, 234, 0.15);
+			}
 
-        function getMonthName(date) {
-            const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                           'July', 'August', 'September', 'October', 'November', 'December'];
-            return months[date.getMonth()] + ' ' + date.getFullYear();
-        }
+			.stat-card:hover::before {
+				transform: translateX(0);
+			}
 
-        async function fetchDashboardData() {
-            try {
-                const statusResponse = await fetch(`${apiBase}/v2/status/${guid}`);
-                if (!statusResponse.ok) {
-                    throw new Error('Failed to fetch status data');
-                }
-                const statusData = await statusResponse.json();
+			.stat-icon {
+				width: 40px;
+				height: 40px;
+				border-radius: 0.5rem;
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				font-size: 1.25rem;
+				margin-bottom: 0.75rem;
+			}
 
-                const today = new Date();
-                const sevenDaysAgo = new Date(today);
-                sevenDaysAgo.setDate(today.getDate() - 6);
+			.stat-icon.tokens {
+				background: rgba(102, 126, 234, 0.2);
+				color: #667eea;
+			}
+			.stat-icon.cost {
+				background: rgba(74, 222, 128, 0.2);
+				color: var(--success-color);
+			}
+			.stat-icon.session {
+				background: rgba(251, 191, 36, 0.2);
+				color: var(--warning-color);
+			}
+			.stat-icon.hosts {
+				background: rgba(236, 72, 153, 0.2);
+				color: #ec4899;
+			}
+			.stat-icon.projects {
+				background: rgba(79, 172, 254, 0.2);
+				color: #4facfe;
+			}
 
-                const dailyResponse = await fetch(
-                    `${apiBase}/v2/daily/${guid}?since=${sevenDaysAgo.toISOString()}&until=${today.toISOString()}`
-                );
-                if (!dailyResponse.ok) {
-                    throw new Error('Failed to fetch daily data');
-                }
-                const dailyData = await dailyResponse.json();
+			.stat-label {
+				font-size: 0.875rem;
+				color: var(--text-muted);
+				text-transform: uppercase;
+				letter-spacing: 0.5px;
+				margin-bottom: 0.25rem;
+			}
 
-                const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-                const monthlyResponse = await fetch(
-                    `${apiBase}/v2/monthly/${guid}?since=${firstOfMonth.toISOString()}&until=${today.toISOString()}`
-                );
-                let monthlyData = null;
-                if (monthlyResponse.ok) {
-                    monthlyData = await monthlyResponse.json();
-                }
+			.stat-value {
+				font-size: 1.75rem;
+				font-weight: 600;
+				line-height: 1;
+				margin-bottom: 0.25rem;
+			}
 
-                return { status: statusData, daily: dailyData, monthly: monthlyData };
-            } catch (error) {
-                console.error('Error fetching data:', error);
-                throw error;
-            }
-        }
+			.stat-value.cost {
+				color: var(--success-color);
+			}
+			.stat-value.countdown {
+				color: var(--warning-color);
+				font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+			}
 
-        function updateDashboard(data) {
-            const { status, daily, monthly } = data;
+			.stat-subtitle {
+				font-size: 0.8125rem;
+				color: var(--text-muted);
+			}
 
-            // Calculate today's totals
-            const today = new Date().toISOString().split('T')[0];
-            const todayData = daily.daily.find((d) => d.date === today) || {
-                totalTokens: 0,
-                cost: 0,
-                inputTokens: 0,
-                outputTokens: 0,
-                cacheCreationTokens: 0,
-                cacheReadTokens: 0,
-            };
+			/* Chart Section */
+			.chart-card {
+				background: var(--card-bg);
+				border: 1px solid var(--card-border);
+				border-radius: 0.75rem;
+				padding: 1.5rem;
+				margin-bottom: 2rem;
+			}
 
-            // Update stats cards
-            document.getElementById('totalTokens').textContent = formatNumber(todayData.totalTokens);
-            document.getElementById('totalCost').textContent = formatCost(todayData.cost);
+			.chart-header {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				margin-bottom: 1.5rem;
+			}
 
-            // Token breakdown
-            const breakdown = `Input: ${formatNumber(todayData.inputTokens)} • Output: ${formatNumber(todayData.outputTokens)} • Cache: ${formatNumber(todayData.cacheCreationTokens + todayData.cacheReadTokens)}`;
-            document.getElementById('tokenBreakdown').textContent = breakdown;
+			.chart-title {
+				font-size: 1.125rem;
+				font-weight: 500;
+				margin: 0;
+			}
 
-            // Calculate current session cost
-            let sessionCost = 0;
-            status.entries.forEach((entry) => {
-                entry.projects.forEach((project) => {
-                    if (project.modelBreakdowns && project.modelBreakdowns.length > 0) {
-                        project.modelBreakdowns.forEach(mb => {
-                            sessionCost += mb.cost || 0;
-                        });
-                    } else {
-                        const totalTokens = project.tokens.inputTokens + project.tokens.outputTokens + 
-                                           project.tokens.cacheCreationTokens + project.tokens.cacheReadTokens;
-                        sessionCost += totalTokens * 0.000003;
-                    }
-                });
-            });
-            document.getElementById('sessionCost').textContent = formatCost(sessionCost);
+			.chart-container {
+				height: 300px;
+				position: relative;
+			}
 
-            // Update session countdown
-            const sessionEnd = calculateSessionEnd();
-            const updateCountdown = () => {
-                const now = new Date();
-                const remaining = sessionEnd - now;
-                if (remaining > 0) {
-                    document.getElementById('sessionCountdown').textContent = formatCountdown(remaining);
-                    document.getElementById('sessionEndTime').textContent = sessionEnd.toLocaleTimeString();
-                } else {
-                    const newSessionEnd = calculateSessionEnd();
-                    sessionEnd.setTime(newSessionEnd.getTime());
-                }
-            };
-            updateCountdown();
-            if (window.countdownInterval) {
-                clearInterval(window.countdownInterval);
-            }
-            window.countdownInterval = setInterval(updateCountdown, 1000);
+			.chart-bars {
+				display: flex;
+				align-items: flex-end;
+				height: 100%;
+				gap: 0.5rem;
+				padding: 0 0.5rem;
+			}
 
-            // Calculate monthly cost
-            const currentMonth = new Date();
-            document.getElementById('monthName').textContent = getMonthName(currentMonth);
-            
-            if (monthly && monthly.monthly && monthly.monthly.length > 0) {
-                const currentMonthData = monthly.monthly[0];
-                document.getElementById('monthCost').textContent = formatCost(currentMonthData.cost);
-            } else {
-                let monthCost = 0;
-                const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-                daily.daily.forEach(day => {
-                    const dayDate = new Date(day.date);
-                    if (dayDate >= monthStart) {
-                        monthCost += day.cost;
-                    }
-                });
-                document.getElementById('monthCost').textContent = formatCost(monthCost);
-            }
+			.chart-bar {
+				flex: 1;
+				background: var(--primary-gradient);
+				border-radius: 0.25rem 0.25rem 0 0;
+				position: relative;
+				min-height: 4px;
+				transition: opacity 0.2s;
+				cursor: pointer;
+			}
 
-            // Host and project counts
-            const uniqueHosts = new Set();
-            const uniqueProjects = new Set();
-            const projectTokens = {};
+			.chart-bar:hover {
+				opacity: 0.8;
+			}
 
-            status.entries.forEach((entry) => {
-                uniqueHosts.add(entry.hostname);
-                entry.projects.forEach((project) => {
-                    uniqueProjects.add(project.projectName);
-                    if (!projectTokens[project.projectName]) {
-                        projectTokens[project.projectName] = {
-                            tokens: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
-                            hosts: new Set(),
-                        };
-                    }
-                    projectTokens[project.projectName].tokens.inputTokens += project.tokens.inputTokens;
-                    projectTokens[project.projectName].tokens.outputTokens += project.tokens.outputTokens;
-                    projectTokens[project.projectName].tokens.cacheCreationTokens += project.tokens.cacheCreationTokens;
-                    projectTokens[project.projectName].tokens.cacheReadTokens += project.tokens.cacheReadTokens;
-                    projectTokens[project.projectName].hosts.add(entry.hostname);
-                });
-            });
+			.chart-bar-label {
+				position: absolute;
+				bottom: -30px;
+				left: 50%;
+				transform: translateX(-50%);
+				font-size: 0.75rem;
+				color: var(--text-muted);
+				white-space: nowrap;
+			}
 
-            document.getElementById('hostCount').textContent = uniqueHosts.size;
-            document.getElementById('projectCount').textContent = uniqueProjects.size;
-            document.getElementById('hostBadge').textContent = uniqueHosts.size;
-            document.getElementById('projectBadge').textContent = uniqueProjects.size;
+			/* Lists Section */
+			.list-card {
+				background: var(--card-bg);
+				border: 1px solid var(--card-border);
+				border-radius: 0.75rem;
+				padding: 1.5rem;
+				height: 100%;
+			}
 
-            // Update hosts list
-            const hostsList = document.getElementById('hostsList');
-            hostsList.innerHTML = '';
-            uniqueHosts.forEach((hostname) => {
-                const hostProjects = status.entries.filter((e) => e.hostname === hostname).flatMap((e) => e.projects);
-                const totalTokens = hostProjects.reduce(
-                    (sum, p) =>
-                        sum +
-                        p.tokens.inputTokens +
-                        p.tokens.outputTokens +
-                        p.tokens.cacheCreationTokens +
-                        p.tokens.cacheReadTokens,
-                    0
-                );
+			.list-header {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				margin-bottom: 1.25rem;
+			}
 
-                const hostItem = document.createElement('div');
-                hostItem.className = 'list-item';
-                hostItem.innerHTML = `
+			.list-title {
+				font-size: 1.125rem;
+				font-weight: 500;
+				margin: 0;
+			}
+
+			.list-badge {
+				background: var(--primary-gradient);
+				color: white;
+				padding: 0.25rem 0.75rem;
+				border-radius: 2rem;
+				font-size: 0.875rem;
+				font-weight: 500;
+			}
+
+			.list-item {
+				background: rgba(15, 15, 30, 0.5);
+				border: 1px solid var(--card-border);
+				border-radius: 0.5rem;
+				padding: 1rem;
+				margin-bottom: 0.75rem;
+				transition: all 0.2s;
+			}
+
+			.list-item:hover {
+				background: rgba(15, 15, 30, 0.8);
+				border-color: rgba(102, 126, 234, 0.3);
+			}
+
+			.list-item:last-child {
+				margin-bottom: 0;
+			}
+
+			.list-item-header {
+				display: flex;
+				justify-content: space-between;
+				align-items: start;
+				margin-bottom: 0.5rem;
+			}
+
+			.list-item-name {
+				font-weight: 500;
+				word-break: break-word;
+			}
+
+			.list-item-stats {
+				display: flex;
+				gap: 1.5rem;
+				font-size: 0.875rem;
+				color: var(--text-muted);
+				flex-wrap: wrap;
+			}
+
+			.token-stat {
+				display: flex;
+				align-items: center;
+				gap: 0.375rem;
+			}
+
+			.token-dot {
+				width: 8px;
+				height: 8px;
+				border-radius: 50%;
+			}
+
+			.token-dot.input {
+				background: #667eea;
+			}
+			.token-dot.output {
+				background: #764ba2;
+			}
+			.token-dot.cache-create {
+				background: #f093fb;
+			}
+			.token-dot.cache-read {
+				background: #4facfe;
+			}
+
+			/* Loading and Error States */
+			.loading-container {
+				text-align: center;
+				padding: 4rem 2rem;
+			}
+
+			.spinner-border {
+				width: 3rem;
+				height: 3rem;
+				border-width: 0.25rem;
+			}
+
+			.error-alert {
+				background: rgba(220, 53, 69, 0.1);
+				border: 1px solid rgba(220, 53, 69, 0.3);
+				color: #f8d7da;
+			}
+
+			/* Responsive */
+			@media (max-width: 1400px) {
+				.stat-value {
+					font-size: 1.5rem;
+				}
+			}
+
+			@media (max-width: 992px) {
+				.stat-value {
+					font-size: 1.75rem;
+				}
+				.stats-row .col-lg {
+					margin-bottom: 1rem;
+				}
+			}
+
+			/* Utilities */
+			.text-muted {
+				color: var(--text-muted) !important;
+			}
+			.small {
+				font-size: 0.875rem;
+			}
+		</style>
+	</head>
+	<body>
+		<!-- Navbar -->
+		<nav class="navbar navbar-dark">
+			<div class="container-fluid">
+				<h1 class="navbar-brand mb-0">
+					<i class="bi bi-lightning-charge-fill me-2"></i>
+					Claude Usage Dashboard
+				</h1>
+				<span class="text-muted small">Real-time token usage and cost tracking</span>
+			</div>
+		</nav>
+
+		<!-- Main Container -->
+		<div class="container-fluid py-4">
+			<!-- Loading State -->
+			<div id="loading" class="loading-container">
+				<div class="spinner-border text-primary mb-3" role="status">
+					<span class="visually-hidden">Loading...</span>
+				</div>
+				<p class="text-muted">Loading dashboard data...</p>
+			</div>
+
+			<!-- Error State -->
+			<div id="error" class="alert error-alert d-none" role="alert">
+				<i class="bi bi-exclamation-triangle-fill me-2"></i>
+				<span id="errorMessage">Error loading data</span>
+			</div>
+
+			<!-- Dashboard Content -->
+			<div id="dashboard" class="d-none">
+				<!-- Stats Cards -->
+				<div class="row stats-row g-3">
+					<div class="col-12 col-sm-6 col-md-4 col-lg">
+						<div class="stat-card">
+							<div class="stat-icon tokens">
+								<i class="bi bi-coin"></i>
+							</div>
+							<div class="stat-label">Total Tokens Today</div>
+							<div class="stat-value" id="totalTokens">0</div>
+							<div class="stat-subtitle" id="tokenBreakdown">Loading...</div>
+						</div>
+					</div>
+
+					<div class="col-12 col-sm-6 col-md-4 col-lg">
+						<div class="stat-card">
+							<div class="stat-icon cost">
+								<i class="bi bi-currency-dollar"></i>
+							</div>
+							<div class="stat-label">Total Cost Today</div>
+							<div class="stat-value cost" id="totalCost">$0.00</div>
+							<div class="stat-subtitle">USD</div>
+						</div>
+					</div>
+
+					<div class="col-12 col-sm-6 col-md-4 col-lg">
+						<div class="stat-card">
+							<div class="stat-icon cost">
+								<i class="bi bi-clock-history"></i>
+							</div>
+							<div class="stat-label">Current Session Cost</div>
+							<div class="stat-value cost" id="sessionCost">$0.00</div>
+							<div class="stat-subtitle">Since session start</div>
+						</div>
+					</div>
+
+					<div class="col-12 col-sm-6 col-md-4 col-lg">
+						<div class="stat-card">
+							<div class="stat-icon session">
+								<i class="bi bi-hourglass-split"></i>
+							</div>
+							<div class="stat-label">Session Ends In</div>
+							<div class="stat-value countdown" id="sessionCountdown">--:--:--</div>
+							<div class="stat-subtitle" id="sessionEndTime">Calculating...</div>
+						</div>
+					</div>
+
+					<div class="col-12 col-sm-6 col-md-4 col-lg">
+						<div class="stat-card">
+							<div class="stat-icon cost">
+								<i class="bi bi-calendar-month"></i>
+							</div>
+							<div class="stat-label">Total Cost This Month</div>
+							<div class="stat-value cost" id="monthCost">$0.00</div>
+							<div class="stat-subtitle" id="monthName">Loading...</div>
+						</div>
+					</div>
+
+					<div class="col-12 col-sm-6 col-md-4 col-lg">
+						<div class="stat-card">
+							<div class="stat-icon hosts">
+								<i class="bi bi-pc-display"></i>
+							</div>
+							<div class="stat-label">Active Hosts</div>
+							<div class="stat-value" id="hostCount">0</div>
+							<div class="stat-subtitle">machines reporting</div>
+						</div>
+					</div>
+
+					<div class="col-12 col-sm-6 col-md-4 col-lg">
+						<div class="stat-card">
+							<div class="stat-icon projects">
+								<i class="bi bi-folder2-open"></i>
+							</div>
+							<div class="stat-label">Active Projects</div>
+							<div class="stat-value" id="projectCount">0</div>
+							<div class="stat-subtitle">unique projects</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Chart -->
+				<div class="chart-card">
+					<div class="chart-header">
+						<h2 class="chart-title">
+							<i class="bi bi-graph-up me-2"></i>
+							Token Usage - Last 7 Days
+						</h2>
+						<span class="text-muted small">Daily totals</span>
+					</div>
+					<div class="chart-container">
+						<div class="chart-bars" id="dailyChart"></div>
+					</div>
+				</div>
+
+				<!-- Lists -->
+				<div class="row g-3">
+					<div class="col-12 col-lg-4">
+						<div class="list-card">
+							<div class="list-header">
+								<h3 class="list-title">
+									<i class="bi bi-hdd-network me-2"></i>
+									Active Hosts
+								</h3>
+								<span class="list-badge" id="hostBadge">0</span>
+							</div>
+							<div id="hostsList"></div>
+						</div>
+					</div>
+
+					<div class="col-12 col-lg-8">
+						<div class="list-card">
+							<div class="list-header">
+								<h3 class="list-title">
+									<i class="bi bi-folder-fill me-2"></i>
+									Projects
+								</h3>
+								<span class="list-badge" id="projectBadge">0</span>
+							</div>
+							<div id="projectsList"></div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Footer -->
+				<div class="text-center mt-4">
+					<p class="text-muted small mb-0" id="lastUpdated">Last updated: Never</p>
+				</div>
+			</div>
+		</div>
+
+		<!-- Bootstrap JS (optional, but includes Popper for tooltips) -->
+		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+		<script>
+			const guid = window.location.pathname.substring(1);
+			const apiBase = window.location.origin;
+
+			function formatNumber(num) {
+				if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
+				if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
+				if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
+				return num.toLocaleString();
+			}
+
+			function formatCost(cost) {
+				return '$' + cost.toFixed(2);
+			}
+
+			function calculateSessionEnd() {
+				const now = new Date();
+				const utcHour = now.getUTCHours();
+				const nextBoundary = Math.ceil(utcHour / 5) * 5;
+
+				const sessionEnd = new Date(now);
+				sessionEnd.setUTCHours(nextBoundary, 0, 0, 0);
+
+				if (nextBoundary >= 24) {
+					sessionEnd.setUTCDate(sessionEnd.getUTCDate() + 1);
+					sessionEnd.setUTCHours(nextBoundary % 24, 0, 0, 0);
+				}
+
+				return sessionEnd;
+			}
+
+			function formatCountdown(milliseconds) {
+				const totalSeconds = Math.floor(milliseconds / 1000);
+				const hours = Math.floor(totalSeconds / 3600);
+				const minutes = Math.floor((totalSeconds % 3600) / 60);
+				const seconds = totalSeconds % 60;
+
+				return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+			}
+
+			function getMonthName(date) {
+				const months = [
+					'January',
+					'February',
+					'March',
+					'April',
+					'May',
+					'June',
+					'July',
+					'August',
+					'September',
+					'October',
+					'November',
+					'December',
+				];
+				return months[date.getMonth()] + ' ' + date.getFullYear();
+			}
+
+			async function fetchDashboardData() {
+				try {
+					const statusResponse = await fetch(`${apiBase}/v2/status/${guid}`);
+					if (!statusResponse.ok) {
+						throw new Error('Failed to fetch status data');
+					}
+					const statusData = await statusResponse.json();
+
+					const today = new Date();
+					const sevenDaysAgo = new Date(today);
+					sevenDaysAgo.setDate(today.getDate() - 6);
+
+					const dailyResponse = await fetch(
+						`${apiBase}/v2/daily/${guid}?since=${sevenDaysAgo.toISOString()}&until=${today.toISOString()}`,
+					);
+					if (!dailyResponse.ok) {
+						throw new Error('Failed to fetch daily data');
+					}
+					const dailyData = await dailyResponse.json();
+
+					const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+					const monthlyResponse = await fetch(
+						`${apiBase}/v2/monthly/${guid}?since=${firstOfMonth.toISOString()}&until=${today.toISOString()}`,
+					);
+					let monthlyData = null;
+					if (monthlyResponse.ok) {
+						monthlyData = await monthlyResponse.json();
+					}
+
+					return { status: statusData, daily: dailyData, monthly: monthlyData };
+				} catch (error) {
+					console.error('Error fetching data:', error);
+					throw error;
+				}
+			}
+
+			function updateDashboard(data) {
+				const { status, daily, monthly } = data;
+
+				// Calculate today's totals
+				const today = new Date().toISOString().split('T')[0];
+				const todayData = daily.daily.find((d) => d.date === today) || {
+					totalTokens: 0,
+					cost: 0,
+					inputTokens: 0,
+					outputTokens: 0,
+					cacheCreationTokens: 0,
+					cacheReadTokens: 0,
+				};
+
+				// Update stats cards
+				document.getElementById('totalTokens').textContent = formatNumber(todayData.totalTokens);
+				document.getElementById('totalCost').textContent = formatCost(todayData.cost);
+
+				// Token breakdown
+				const breakdown = `Input: ${formatNumber(todayData.inputTokens)} • Output: ${formatNumber(todayData.outputTokens)} • Cache: ${formatNumber(todayData.cacheCreationTokens + todayData.cacheReadTokens)}`;
+				document.getElementById('tokenBreakdown').textContent = breakdown;
+
+				// Calculate current session cost
+				let sessionCost = 0;
+				status.entries.forEach((entry) => {
+					entry.projects.forEach((project) => {
+						if (project.modelBreakdowns && project.modelBreakdowns.length > 0) {
+							project.modelBreakdowns.forEach((mb) => {
+								sessionCost += mb.cost || 0;
+							});
+						} else {
+							const totalTokens =
+								project.tokens.inputTokens +
+								project.tokens.outputTokens +
+								project.tokens.cacheCreationTokens +
+								project.tokens.cacheReadTokens;
+							sessionCost += totalTokens * 0.000003;
+						}
+					});
+				});
+				document.getElementById('sessionCost').textContent = formatCost(sessionCost);
+
+				// Update session countdown
+				const sessionEnd = calculateSessionEnd();
+				const updateCountdown = () => {
+					const now = new Date();
+					const remaining = sessionEnd - now;
+					if (remaining > 0) {
+						document.getElementById('sessionCountdown').textContent = formatCountdown(remaining);
+						document.getElementById('sessionEndTime').textContent = sessionEnd.toLocaleTimeString();
+					} else {
+						const newSessionEnd = calculateSessionEnd();
+						sessionEnd.setTime(newSessionEnd.getTime());
+					}
+				};
+				updateCountdown();
+				if (window.countdownInterval) {
+					clearInterval(window.countdownInterval);
+				}
+				window.countdownInterval = setInterval(updateCountdown, 1000);
+
+				// Calculate monthly cost
+				const currentMonth = new Date();
+				document.getElementById('monthName').textContent = getMonthName(currentMonth);
+
+				if (monthly && monthly.monthly && monthly.monthly.length > 0) {
+					const currentMonthData = monthly.monthly[0];
+					document.getElementById('monthCost').textContent = formatCost(currentMonthData.cost);
+				} else {
+					let monthCost = 0;
+					const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
+					daily.daily.forEach((day) => {
+						const dayDate = new Date(day.date);
+						if (dayDate >= monthStart) {
+							monthCost += day.cost;
+						}
+					});
+					document.getElementById('monthCost').textContent = formatCost(monthCost);
+				}
+
+				// Host and project counts
+				const uniqueHosts = new Set();
+				const uniqueProjects = new Set();
+				const projectTokens = {};
+
+				status.entries.forEach((entry) => {
+					uniqueHosts.add(entry.hostname);
+					entry.projects.forEach((project) => {
+						uniqueProjects.add(project.projectName);
+						if (!projectTokens[project.projectName]) {
+							projectTokens[project.projectName] = {
+								tokens: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
+								hosts: new Set(),
+							};
+						}
+						projectTokens[project.projectName].tokens.inputTokens += project.tokens.inputTokens;
+						projectTokens[project.projectName].tokens.outputTokens += project.tokens.outputTokens;
+						projectTokens[project.projectName].tokens.cacheCreationTokens += project.tokens.cacheCreationTokens;
+						projectTokens[project.projectName].tokens.cacheReadTokens += project.tokens.cacheReadTokens;
+						projectTokens[project.projectName].hosts.add(entry.hostname);
+					});
+				});
+
+				document.getElementById('hostCount').textContent = uniqueHosts.size;
+				document.getElementById('projectCount').textContent = uniqueProjects.size;
+				document.getElementById('hostBadge').textContent = uniqueHosts.size;
+				document.getElementById('projectBadge').textContent = uniqueProjects.size;
+
+				// Update hosts list
+				const hostsList = document.getElementById('hostsList');
+				hostsList.innerHTML = '';
+				uniqueHosts.forEach((hostname) => {
+					const hostProjects = status.entries.filter((e) => e.hostname === hostname).flatMap((e) => e.projects);
+					const totalTokens = hostProjects.reduce(
+						(sum, p) =>
+							sum +
+							p.tokens.inputTokens +
+							p.tokens.outputTokens +
+							p.tokens.cacheCreationTokens +
+							p.tokens.cacheReadTokens,
+						0,
+					);
+
+					const hostItem = document.createElement('div');
+					hostItem.className = 'list-item';
+					hostItem.innerHTML = `
                     <div class="list-item-header">
                         <div class="list-item-name">${hostname}</div>
                     </div>
@@ -681,30 +731,30 @@
                         <span><i class="bi bi-coin me-1"></i>${formatNumber(totalTokens)} tokens</span>
                     </div>
                 `;
-                hostsList.appendChild(hostItem);
-            });
+					hostsList.appendChild(hostItem);
+				});
 
-            // Update projects list
-            const projectsList = document.getElementById('projectsList');
-            projectsList.innerHTML = '';
-            Object.entries(projectTokens)
-                .sort((a, b) => {
-                    const totalA =
-                        a[1].tokens.inputTokens +
-                        a[1].tokens.outputTokens +
-                        a[1].tokens.cacheCreationTokens +
-                        a[1].tokens.cacheReadTokens;
-                    const totalB =
-                        b[1].tokens.inputTokens +
-                        b[1].tokens.outputTokens +
-                        b[1].tokens.cacheCreationTokens +
-                        b[1].tokens.cacheReadTokens;
-                    return totalB - totalA;
-                })
-                .forEach(([projectName, data]) => {
-                    const projectItem = document.createElement('div');
-                    projectItem.className = 'list-item';
-                    projectItem.innerHTML = `
+				// Update projects list
+				const projectsList = document.getElementById('projectsList');
+				projectsList.innerHTML = '';
+				Object.entries(projectTokens)
+					.sort((a, b) => {
+						const totalA =
+							a[1].tokens.inputTokens +
+							a[1].tokens.outputTokens +
+							a[1].tokens.cacheCreationTokens +
+							a[1].tokens.cacheReadTokens;
+						const totalB =
+							b[1].tokens.inputTokens +
+							b[1].tokens.outputTokens +
+							b[1].tokens.cacheCreationTokens +
+							b[1].tokens.cacheReadTokens;
+						return totalB - totalA;
+					})
+					.forEach(([projectName, data]) => {
+						const projectItem = document.createElement('div');
+						projectItem.className = 'list-item';
+						projectItem.innerHTML = `
                         <div class="list-item-header">
                             <div class="list-item-name">${projectName}</div>
                         </div>
@@ -715,55 +765,54 @@
                             <div class="token-stat"><span class="token-dot cache-read"></span> ${formatNumber(data.tokens.cacheReadTokens)}</div>
                         </div>
                     `;
-                    projectsList.appendChild(projectItem);
-                });
+						projectsList.appendChild(projectItem);
+					});
 
-            // Update daily chart
-            const chartBar = document.getElementById('dailyChart');
-            chartBar.innerHTML = '';
+				// Update daily chart
+				const chartBar = document.getElementById('dailyChart');
+				chartBar.innerHTML = '';
 
-            const maxTokens = Math.max(...daily.daily.map((d) => d.totalTokens));
-            daily.daily.forEach((day) => {
-                const bar = document.createElement('div');
-                bar.className = 'chart-bar';
-                const height = (day.totalTokens / maxTokens) * 100;
-                bar.style.height = `${height}%`;
-                bar.title = `${day.date}: ${formatNumber(day.totalTokens)} tokens, ${formatCost(day.cost)}`;
+				const maxTokens = Math.max(...daily.daily.map((d) => d.totalTokens));
+				daily.daily.forEach((day) => {
+					const bar = document.createElement('div');
+					bar.className = 'chart-bar';
+					const height = (day.totalTokens / maxTokens) * 100;
+					bar.style.height = `${height}%`;
+					bar.title = `${day.date}: ${formatNumber(day.totalTokens)} tokens, ${formatCost(day.cost)}`;
 
-                const label = document.createElement('div');
-                label.className = 'chart-bar-label';
-                label.textContent = new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' });
-                bar.appendChild(label);
+					const label = document.createElement('div');
+					label.className = 'chart-bar-label';
+					label.textContent = new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' });
+					bar.appendChild(label);
 
-                chartBar.appendChild(bar);
-            });
+					chartBar.appendChild(bar);
+				});
 
-            // Update last updated time
-            document.getElementById('lastUpdated').textContent = 
-                `Last updated: ${new Date().toLocaleTimeString()}`;
+				// Update last updated time
+				document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
 
-            // Show dashboard, hide loading
-            document.getElementById('loading').classList.add('d-none');
-            document.getElementById('dashboard').classList.remove('d-none');
-        }
+				// Show dashboard, hide loading
+				document.getElementById('loading').classList.add('d-none');
+				document.getElementById('dashboard').classList.remove('d-none');
+			}
 
-        function showError(message) {
-            document.getElementById('loading').classList.add('d-none');
-            document.getElementById('error').classList.remove('d-none');
-            document.getElementById('errorMessage').textContent = message;
-        }
+			function showError(message) {
+				document.getElementById('loading').classList.add('d-none');
+				document.getElementById('error').classList.remove('d-none');
+				document.getElementById('errorMessage').textContent = message;
+			}
 
-        // Initial load
-        fetchDashboardData()
-            .then(updateDashboard)
-            .catch(error => showError(error.message));
+			// Initial load
+			fetchDashboardData()
+				.then(updateDashboard)
+				.catch((error) => showError(error.message));
 
-        // Refresh every 30 seconds
-        setInterval(() => {
-            fetchDashboardData()
-                .then(updateDashboard)
-                .catch(error => console.error('Refresh error:', error));
-        }, 30000);
-    </script>
-</body>
+			// Refresh every 30 seconds
+			setInterval(() => {
+				fetchDashboardData()
+					.then(updateDashboard)
+					.catch((error) => console.error('Refresh error:', error));
+			}, 30000);
+		</script>
+	</body>
 </html>
