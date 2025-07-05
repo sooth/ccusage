@@ -158,7 +158,8 @@ def load_from_db():
                         'totalTokens': row['total_tokens']
                     },
                     'lastUpdated': row['last_updated'],
-                    'hostname': hostname
+                    'hostname': hostname,
+                    'cost': row['cost']
                 }
                 
                 if row['expires_at']:
@@ -693,10 +694,16 @@ def daily_usage(guid):
                 today_entry['cacheReadTokens'] += tokens.get('cacheReadTokens', 0)
                 today_entry['totalTokens'] += tokens.get('totalTokens', 0)
                 
-                # Calculate cost for active session
+                # Add cost from project data if available
+                if 'cost' in project_data:
+                    today_entry['cost'] += project_data.get('cost', 0)
+                
+                # Calculate cost for active session from model breakdowns
                 if 'modelBreakdowns' in project_data:
                     for mb in project_data['modelBreakdowns']:
-                        today_entry['cost'] += mb.get('cost', 0)
+                        # If cost wasn't already in project_data, calculate from model breakdowns
+                        if 'cost' not in project_data:
+                            today_entry['cost'] += mb.get('cost', 0)
                         
                         # Aggregate model breakdowns
                         model_name = mb['modelName']
@@ -716,8 +723,8 @@ def daily_usage(guid):
                         model['cacheCreationInputTokens'] += mb.get('cacheCreationInputTokens', 0)
                         model['cacheReadInputTokens'] += mb.get('cacheReadInputTokens', 0)
                         model['cost'] += mb.get('cost', 0)
-                else:
-                    # Fallback cost calculation
+                elif 'cost' not in project_data:
+                    # Fallback cost calculation only if no cost field and no model breakdowns
                     today_entry['cost'] += tokens.get('totalTokens', 0) * 0.000003
         
         # Convert sets to counts and lists
