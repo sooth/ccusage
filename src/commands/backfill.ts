@@ -91,8 +91,17 @@ export const backfillCommand = define({
 			}>> = {};
 
 			// Process each day's data
+			const today = new Date().toISOString().split('T')[0];
 			for (const dayData of dailyData) {
 				const dateKey = dayData.date;
+
+				// Skip today's data since it's still active and will be handled by current session tracking
+				if (dateKey === today) {
+					if (verbose) {
+						logger.info(`Skipping today's data (${today}) as it's still active`);
+					}
+					continue;
+				}
 
 				// For now, aggregate all data under a single "default" project
 				// TODO: In the future, we could enhance this to track individual projects
