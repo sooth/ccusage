@@ -576,17 +576,13 @@ def daily_usage(guid):
     # Collect daily data
     daily_data = []
     
-    # Get today's date to exclude it from historical data
+    # Get today's date for special handling
     today = datetime.now(timezone.utc).date()
     today_str = today.strftime('%Y-%m-%d')
     
     if guid in historical_data:
         for date_str, hosts in historical_data[guid].items():
             date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
-            
-            # Skip today's historical data - we'll use current session data instead
-            if date_str == today_str:
-                continue
             
             # Check if date is in range
             if start_date <= date_obj <= end_date:
@@ -608,6 +604,12 @@ def daily_usage(guid):
                     day_totals['hosts'][hostname] = True
                     
                     for project_name, project_data in projects.items():
+                        # For today's data, skip projects that are currently active to avoid double-counting
+                        if date_str == today_str and guid in current_data:
+                            if hostname in current_data[guid] and project_name in current_data[guid][hostname]:
+                                # Skip this project - it will be added from current_data
+                                continue
+                        
                         day_totals['projects'][project_name] = True
                         
                         # Aggregate tokens
@@ -650,22 +652,42 @@ def daily_usage(guid):
                 daily_data.append(day_totals)
     
     # Add current session data for today if today is in the date range
-    # Note: We've already excluded today from historical data above
+    # Note: We've already included historical data for today (expired sessions)
+    # but skipped any projects that are currently active to avoid double-counting
     
     if start_date <= today <= end_date and guid in current_data:
-        # Always create a fresh entry for today from current session data
-        today_entry = {
-            'date': today_str,
-            'inputTokens': 0,
-            'outputTokens': 0,
-            'cacheCreationTokens': 0,
-            'cacheReadTokens': 0,
-            'totalTokens': 0,
-            'cost': 0,
-            'hosts': {},
-            'projects': {},
-            'modelBreakdowns': {}
-        }
+        # Find or create today's entry
+        today_entry = None
+        for entry in daily_data:
+            if entry['date'] == today_str:
+                today_entry = entry
+                break
+        
+        if today_entry is None:
+            # Create fresh entry if today wasn't in historical data
+            today_entry = {
+                'date': today_str,
+                'inputTokens': 0,
+                'outputTokens': 0,
+                'cacheCreationTokens': 0,
+                'cacheReadTokens': 0,
+                'totalTokens': 0,
+                'cost': 0,
+                'hosts': {},
+                'projects': {},
+                'modelBreakdowns': {}
+            }
+            daily_data.append(today_entry)
+        else:
+            # Today's entry exists from historical data (expired sessions)
+            # We need to reconstruct the aggregation dicts since we already converted to counts
+            today_entry['hosts'] = {}
+            today_entry['projects'] = {}
+            # Convert modelBreakdowns list back to dict for easier aggregation
+            mb_dict = {}
+            for mb in today_entry.get('modelBreakdowns', []):
+                mb_dict[mb['modelName']] = mb
+            today_entry['modelBreakdowns'] = mb_dict
         
         # Aggregate active session data
         for hostname, projects in current_data[guid].items():
@@ -721,9 +743,6 @@ def daily_usage(guid):
         today_entry['modelBreakdowns'] = list(today_entry['modelBreakdowns'].values())
         del today_entry['hosts']
         del today_entry['projects']
-        
-        # Add today's entry to the daily data
-        daily_data.append(today_entry)
     
     # Sort by date
     daily_data.sort(key=lambda x: x['date'])
