@@ -412,6 +412,93 @@ def daily_usage(guid):
                 
                 daily_data.append(day_totals)
     
+    # Add current session data for today if today is in the date range
+    today = datetime.now(timezone.utc).date()
+    today_str = today.strftime('%Y-%m-%d')
+    
+    if start_date <= today <= end_date and guid in current_data:
+        # Find or create today's entry
+        today_entry = None
+        for entry in daily_data:
+            if entry['date'] == today_str:
+                today_entry = entry
+                break
+        
+        if today_entry is None:
+            today_entry = {
+                'date': today_str,
+                'inputTokens': 0,
+                'outputTokens': 0,
+                'cacheCreationTokens': 0,
+                'cacheReadTokens': 0,
+                'totalTokens': 0,
+                'cost': 0,
+                'hosts': {},
+                'projects': {},
+                'modelBreakdowns': {}
+            }
+            daily_data.append(today_entry)
+        else:
+            # We need to reconstruct the aggregation dicts since we already converted to counts
+            # This is a bit tricky - we'll just use empty dicts since we lost the original host/project names
+            # But that's OK because we'll re-add them from current_data
+            today_entry['hosts'] = {}
+            today_entry['projects'] = {}
+            # Convert modelBreakdowns list back to dict for easier aggregation
+            mb_dict = {}
+            for mb in today_entry.get('modelBreakdowns', []):
+                mb_dict[mb['modelName']] = mb
+            today_entry['modelBreakdowns'] = mb_dict
+        
+        # Aggregate active session data
+        for hostname, projects in current_data[guid].items():
+            today_entry['hosts'][hostname] = True
+            
+            for project_name, project_data in projects.items():
+                today_entry['projects'][project_name] = True
+                
+                # Aggregate tokens
+                tokens = project_data.get('tokens', {})
+                today_entry['inputTokens'] += tokens.get('inputTokens', 0)
+                today_entry['outputTokens'] += tokens.get('outputTokens', 0)
+                today_entry['cacheCreationTokens'] += tokens.get('cacheCreationTokens', 0)
+                today_entry['cacheReadTokens'] += tokens.get('cacheReadTokens', 0)
+                today_entry['totalTokens'] += tokens.get('totalTokens', 0)
+                
+                # Calculate cost for active session
+                if 'modelBreakdowns' in project_data:
+                    for mb in project_data['modelBreakdowns']:
+                        today_entry['cost'] += mb.get('cost', 0)
+                        
+                        # Aggregate model breakdowns
+                        model_name = mb['modelName']
+                        if model_name not in today_entry['modelBreakdowns']:
+                            today_entry['modelBreakdowns'][model_name] = {
+                                'modelName': model_name,
+                                'inputTokens': 0,
+                                'outputTokens': 0,
+                                'cacheCreationInputTokens': 0,
+                                'cacheReadInputTokens': 0,
+                                'cost': 0
+                            }
+                        
+                        model = today_entry['modelBreakdowns'][model_name]
+                        model['inputTokens'] += mb.get('inputTokens', 0)
+                        model['outputTokens'] += mb.get('outputTokens', 0)
+                        model['cacheCreationInputTokens'] += mb.get('cacheCreationInputTokens', 0)
+                        model['cacheReadInputTokens'] += mb.get('cacheReadInputTokens', 0)
+                        model['cost'] += mb.get('cost', 0)
+                else:
+                    # Fallback cost calculation
+                    today_entry['cost'] += tokens.get('totalTokens', 0) * 0.000003
+        
+        # Convert sets to counts and lists
+        today_entry['hostCount'] = len(today_entry['hosts'])
+        today_entry['projectCount'] = len(today_entry['projects'])
+        today_entry['modelBreakdowns'] = list(today_entry['modelBreakdowns'].values())
+        del today_entry['hosts']
+        del today_entry['projects']
+    
     # Sort by date
     daily_data.sort(key=lambda x: x['date'])
     
