@@ -291,16 +291,8 @@ def archive_to_historical(guid: str, hostname: str, project_name: str, project_d
     if 'modelBreakdowns' in project_data:
         archive_data['modelBreakdowns'] = project_data['modelBreakdowns']
     
-    # For active sessions, replace the data. For expired sessions, aggregate.
-    if is_final and project_name in historical_data[guid][date_key][hostname]:
-        # Aggregate with existing historical data (for expired sessions)
-        historical_data[guid][date_key][hostname][project_name] = aggregate_tokens(
-            historical_data[guid][date_key][hostname][project_name],
-            archive_data
-        )
-    else:
-        # Replace existing data (for active sessions)
-        historical_data[guid][date_key][hostname][project_name] = archive_data
+    # Always replace, never aggregate - to prevent accumulation
+    historical_data[guid][date_key][hostname][project_name] = archive_data
     
     # Save to database as historical data
     save_to_db(guid, hostname, project_name, archive_data, is_current=False)
@@ -608,6 +600,7 @@ def daily_usage(guid):
                         if date_str == today_str and guid in current_data:
                             if hostname in current_data[guid] and project_name in current_data[guid][hostname]:
                                 # Skip this project - it will be added from current_data
+                                logging.info(f"Skipping {project_name} from historical as it's in current_data")
                                 continue
                         
                         day_totals['projects'][project_name] = True
