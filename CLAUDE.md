@@ -197,6 +197,31 @@ This ensures code quality and catches issues immediately after changes.
 - Context7 MCP server available for library documentation lookup
 - do not use console.log. use logger.ts instead
 
+# Flask Server Architecture
+
+## CRITICAL: Single Flask App Rule
+
+**THERE MUST BE ONLY ONE FLASK APP FILE: `flask_app.py`**
+
+- NO flask_app_v2.py, flask_app_v3.py, flask_app_deploy.py or any variants
+- ALL features must be in the single `flask_app.py` file
+- The SAME file works locally and on PythonAnywhere
+- Use environment detection for configuration differences
+
+## Before ANY Flask Changes:
+
+1. Run `python3 validate_endpoints.py` to ensure no endpoints are lost
+2. Make changes to `flask_app.py` ONLY
+3. Test locally before deployment
+4. Deploy using `python3 deploy_to_pythonanywhere.py`
+
+## Why This Matters:
+
+- Multiple versions led to missing endpoints (like /v2/backfill)
+- Features got lost between versions
+- Confusion about which file to edit
+- Deployment nightmares
+
 # important-instruction-reminders
 
 Do what has been asked; nothing more, nothing less.

@@ -63,29 +63,55 @@ def reload_webapp(api_token):
         print(f"Response: {response.text}")
         return False
 
+def upload_dashboard_file(api_token):
+    """Upload dashboard HTML file to PythonAnywhere"""
+    local_dashboard = 'dashboard_bootstrap.html'
+    remote_dashboard = f'/home/{USERNAME}/mysite/dashboard_bootstrap.html'
+    
+    if not os.path.exists(local_dashboard):
+        print(f"Warning: {local_dashboard} not found, dashboard will not work")
+        return False
+    
+    print(f"Uploading {local_dashboard} to {remote_dashboard}...")
+    
+    with open(local_dashboard, 'rb') as f:
+        response = requests.post(
+            urljoin(API_BASE, f"api/v0/user/{USERNAME}/files/path{remote_dashboard}"),
+            files={'content': f},
+            headers={'Authorization': f'Token {api_token}'}
+        )
+    
+    if response.status_code in [200, 201]:
+        print("✓ Dashboard file uploaded successfully")
+        return True
+    else:
+        print(f"✗ Dashboard upload failed: {response.status_code}")
+        print(f"Response: {response.text}")
+        return False
+
 def main():
     """Main deployment function"""
     print("=== PythonAnywhere Deployment Script ===")
     print(f"Deploying to: {DOMAIN_NAME}")
     
-    # Check if flask_app_deploy.py exists
-    local_file = 'flask_app_deploy.py'
+    # Use the single Flask app file
+    local_file = 'flask_app.py'
     if not os.path.exists(local_file):
-        # Try flask_app_v2.py as fallback
-        local_file = 'flask_app_v2.py'
-        if not os.path.exists(local_file):
-            print(f"Error: {local_file} not found in current directory")
-            sys.exit(1)
+        print(f"Error: {local_file} not found in current directory")
+        sys.exit(1)
     
     print(f"Using local file: {local_file}")
     
     # Get API token
     api_token = get_api_token()
     
-    # Upload file
+    # Upload Flask app
     if not upload_file(local_file, api_token):
         print("Deployment failed at upload stage")
         sys.exit(1)
+    
+    # Upload dashboard HTML file
+    upload_dashboard_file(api_token)
     
     # Reload web app
     if not reload_webapp(api_token):

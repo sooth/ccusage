@@ -14,6 +14,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { glob } from 'tinyglobby';
 import { CLAUDE_PROJECTS_DIR_NAME, USAGE_DATA_GLOB_PATTERN } from './_consts.ts';
+import { extractAnonymizedProjectPath } from './_path-anonymizer.ts';
 import { identifySessionBlocks } from './_session-blocks.ts';
 import {
 	calculateCostForEntry,
@@ -105,11 +106,8 @@ export class LiveMonitor implements Disposable {
 				const fileInfo = filesWithBaseDirs.find(item => item.file === file);
 				const baseDir = fileInfo?.baseDir ?? '';
 
-				// Extract project path from file path
-				const relativePath = path.relative(baseDir, file);
-				const parts = relativePath.split(path.sep);
-				// Project name is the first directory in the path
-				const projectPath = parts.length > 0 ? parts[0] : 'Unknown Project';
+				// Extract and anonymize project path
+				const projectPath = extractAnonymizedProjectPath(file, baseDir);
 
 				const content = await readFile(file, 'utf-8')
 					.catch(() => {

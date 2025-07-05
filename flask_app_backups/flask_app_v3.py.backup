@@ -422,6 +422,8 @@ def update_v2():
         projects = data.get('projects', [])
         expires_at = data.get('expiresAt')
         
+        logging.info(f"Update request received - GUID: {guid}, hostname: {hostname}, projects: {len(projects)}")
+        
         if not guid or not hostname:
             return jsonify({'error': 'Missing required fields: guid, hostname'}), 400
         
@@ -494,7 +496,29 @@ def status_v2(guid):
     purge_expired_entries()  # Clean up before returning data
     
     if guid not in current_data:
-        return jsonify({'error': 'GUID not found'}), 404
+        # Log available GUIDs for debugging
+        logging.info(f"GUID {guid} not found. Available GUIDs: {list(current_data.keys())}")
+        # Try to load from database in case it wasn't loaded on startup
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute('''
+                SELECT COUNT(*) as count FROM usage_data WHERE guid = ? AND is_current = 1
+            ''', (guid,))
+            result = cursor.fetchone()
+            if result and result['count'] > 0:
+                logging.info(f"GUID {guid} found in database but not in memory, reloading...")
+                load_from_db()
+                if guid in current_data:
+                    logging.info(f"Successfully loaded GUID {guid} from database")
+                else:
+                    logging.error(f"Failed to load GUID {guid} from database even though it exists")
+            conn.close()
+        except Exception as e:
+            logging.error(f"Error checking database for GUID {guid}: {e}")
+        
+        if guid not in current_data:
+            return jsonify({'error': 'GUID not found'}), 404
     
     entries = []
     for hostname, projects in current_data[guid].items():
@@ -823,6 +847,102 @@ def monthly_usage(guid):
             'until': end_date.isoformat()
         }
     })
+
+
+@app.route('/v2/backfill', methods=['POST'])
+def backfill_v2():
+    """Backfill historical usage data directly to historical storage."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
+        
+        guid = data.get('guid')
+        hostname = data.get('hostname')
+        historical_data_input = data.get('historicalData', {})
+        
+        if not guid or not hostname or not historical_data_input:
+            return jsonify({'error': 'Missing required fields: guid, hostname, historicalData'}), 400
+        
+        # Process each date's data
+        dates_processed = 0
+        projects_processed = 0
+        
+        for date_str, projects in historical_data_input.items():
+            # Validate date format
+            try:
+                datetime.strptime(date_str, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'error': f'Invalid date format: {date_str}. Use YYYY-MM-DD'}), 400
+            
+            # Initialize nested structure if needed
+            if guid not in historical_data:
+                historical_data[guid] = {}
+            if date_str not in historical_data[guid]:
+                historical_data[guid][date_str] = {}
+            if hostname not in historical_data[guid][date_str]:
+                historical_data[guid][date_str][hostname] = {}
+            
+            # Process each project
+            for project_name, project_data in projects.items():
+                # Prepare data for archiving
+                archive_data = {
+                    'tokens': project_data.get('tokens', {}),
+                    'lastUpdated': f"{date_str}T23:59:59Z",  # End of day timestamp
+                    'cost': project_data.get('cost', 0)
+                }
+                
+                if 'modelBreakdowns' in project_data:
+                    archive_data['modelBreakdowns'] = project_data['modelBreakdowns']
+                
+                # Aggregate with existing historical data
+                if project_name in historical_data[guid][date_str][hostname]:
+                    historical_data[guid][date_str][hostname][project_name] = aggregate_tokens(
+                        historical_data[guid][date_str][hostname][project_name],
+                        archive_data
+                    )
+                else:
+                    historical_data[guid][date_str][hostname][project_name] = archive_data
+                
+                # Save to database
+                save_to_db(guid, hostname, project_name, archive_data, is_current=False, date=date_str)
+                
+                projects_processed += 1
+            
+            dates_processed += 1
+        
+        logging.info(f"Backfilled data for GUID: {guid}, hostname: {hostname}, dates: {dates_processed}, projects: {projects_processed}")
+        
+        return jsonify({
+            'status': 'success',
+            'guid': guid,
+            'hostname': hostname,
+            'dates_processed': dates_processed,
+            'projects_processed': projects_processed
+        })
+        
+    except Exception as e:
+        logging.error(f"Error in /v2/backfill: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/<guid>')
+def dashboard(guid):
+    """Serve the dashboard for a specific GUID."""
+    # Validate GUID format (basic UUID validation)
+    import re
+    if not re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', guid):
+        return 'Invalid GUID format', 400
+    
+    # Read the dashboard HTML file
+    import os
+    dashboard_path = os.path.join(os.path.dirname(__file__), 'dashboard_bootstrap.html')
+    try:
+        with open(dashboard_path, 'r') as f:
+            dashboard_html = f.read()
+        return dashboard_html
+    except FileNotFoundError:
+        return 'Dashboard file not found', 500
 
 
 # Initialize database and load data on startup

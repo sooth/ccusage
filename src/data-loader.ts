@@ -29,6 +29,7 @@ import { isDirectorySync } from 'path-type';
 import { glob } from 'tinyglobby';
 import { z } from 'zod';
 import { CLAUDE_CONFIG_DIR_ENV, CLAUDE_PROJECTS_DIR_NAME, DEFAULT_CLAUDE_CODE_PATH, DEFAULT_CLAUDE_CONFIG_PATH, USAGE_DATA_GLOB_PATTERN, USER_HOME_DIR } from './_consts.ts';
+import { extractAnonymizedProjectPath } from './_path-anonymizer.ts';
 import { fetchDailyUsage, fetchMonthlyUsage } from './_server-client.ts';
 import {
 	identifySessionBlocks,
@@ -870,9 +871,8 @@ export async function loadSessionData(
 
 		// Session ID is the directory name containing the JSONL file
 		const sessionId = parts[parts.length - 2] ?? 'unknown';
-		// Project path is everything before the session ID
-		const joinedPath = parts.slice(0, -2).join(path.sep);
-		const projectPath = joinedPath.length > 0 ? joinedPath : 'Unknown Project';
+		// Extract and anonymize project path
+		const projectPath = extractAnonymizedProjectPath(file, baseDir);
 
 		const content = await readFile(file, 'utf-8');
 		const lines = content

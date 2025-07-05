@@ -11,12 +11,23 @@ This guide explains how to deploy the updated Claude Token Usage Tracker server 
 
 ## Deployment Steps
 
-### 1. Upload the Server File
+### 1. Upload the Server Files
+
+**Option A: Manual Upload**
 
 1. Log in to your PythonAnywhere account
 2. Go to the "Files" tab
 3. Navigate to your web app directory (e.g., `/home/yourusername/mysite/`)
 4. Upload or replace the `flask_app.py` file with the new version from this repository
+5. Upload the `dashboard_bootstrap.html` file to the same directory (REQUIRED for dashboard to work)
+
+**Option B: Automated Deployment (Recommended)**
+
+1. Run the deployment script from your local machine:
+   ```bash
+   python deploy_to_pythonanywhere.py
+   ```
+   This will automatically upload both `flask_app.py` and `dashboard_bootstrap.html` files.
 
 ### 2. Install Required Dependencies
 

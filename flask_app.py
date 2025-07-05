@@ -5,13 +5,16 @@ Stores both current session data and historical daily/monthly aggregates.
 Supports project-level tracking and multi-host aggregation.
 """
 
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
 import logging
 import os
+import json
+import sqlite3
 from typing import Dict, Any, List, Optional
 from collections import defaultdict
+from contextlib import contextmanager
 
 app = Flask(__name__)
 
@@ -26,13 +29,182 @@ else:
     # Local development logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# In-memory storage
+# Database configuration
+DB_PATH = os.environ.get('CLAUDE_USAGE_DB', 'claude_usage.db')
+
+# In-memory storage (will be backed by SQLite)
 # Current session data: {guid: {hostname: {projectName: {data}}}}
 current_data: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
 # Historical data: {guid: {date: {hostname: {projectName: {aggregated_data}}}}}
 historical_data: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
 
+
+# Database helper functions
+def init_database():
+    """Initialize database with schema."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS usage_data (
+                guid TEXT NOT NULL,
+                hostname TEXT NOT NULL,
+                project_name TEXT NOT NULL,
+                date TEXT NOT NULL,
+                is_current BOOLEAN DEFAULT 1,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                cache_creation_tokens INTEGER DEFAULT 0,
+                cache_read_tokens INTEGER DEFAULT 0,
+                total_tokens INTEGER DEFAULT 0,
+                cost REAL DEFAULT 0,
+                expires_at TEXT,
+                last_updated TEXT,
+                model_breakdowns TEXT,
+                PRIMARY KEY (guid, hostname, project_name, date, is_current)
+            )
+        ''')
+        
+        # Create indexes for performance
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_guid_current ON usage_data(guid, is_current)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_date ON usage_data(date)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_expires ON usage_data(expires_at)')
+        conn.commit()
+        logging.info("Database initialized successfully")
+    except Exception as e:
+        logging.error(f"Error initializing database: {e}")
+        raise
+    finally:
+        conn.close()
+
+@contextmanager
+def get_db():
+    """Database connection context manager."""
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+def save_to_db(guid: str, hostname: str, project_name: str, project_data: Dict[str, Any], is_current: bool = True):
+    """Save data to database."""
+    try:
+        with get_db() as conn:
+            date_key = get_date_key(project_data.get('lastUpdated', ''))
+            tokens = project_data.get('tokens', {})
+            
+            # Calculate cost from model breakdowns if available
+            cost = 0
+            if 'modelBreakdowns' in project_data:
+                for mb in project_data['modelBreakdowns']:
+                    cost += mb.get('cost', 0)
+            else:
+                cost = tokens.get('totalTokens', 0) * 0.000003
+            
+            conn.execute('''
+                INSERT OR REPLACE INTO usage_data 
+                (guid, hostname, project_name, date, is_current, 
+                 input_tokens, output_tokens, cache_creation_tokens, 
+                 cache_read_tokens, total_tokens, cost, expires_at, 
+                 last_updated, model_breakdowns)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                guid, hostname, project_name, date_key, is_current,
+                tokens.get('inputTokens', 0),
+                tokens.get('outputTokens', 0),
+                tokens.get('cacheCreationTokens', 0),
+                tokens.get('cacheReadTokens', 0),
+                tokens.get('totalTokens', 0),
+                cost,
+                project_data.get('expiresAt'),
+                project_data.get('lastUpdated'),
+                json.dumps(project_data.get('modelBreakdowns', []))
+            ))
+    except Exception as e:
+        logging.error(f"Error saving to database: {e}")
+        # Don't raise - we want to continue operating even if DB save fails
+
+def load_from_db():
+    """Load data from database on startup."""
+    try:
+        with get_db() as conn:
+            # Load current data
+            cursor = conn.execute('''
+                SELECT * FROM usage_data WHERE is_current = 1
+            ''')
+            
+            for row in cursor:
+                guid = row['guid']
+                hostname = row['hostname']
+                project_name = row['project_name']
+                
+                # Reconstruct nested structure
+                if guid not in current_data:
+                    current_data[guid] = {}
+                if hostname not in current_data[guid]:
+                    current_data[guid][hostname] = {}
+                
+                current_data[guid][hostname][project_name] = {
+                    'tokens': {
+                        'inputTokens': row['input_tokens'],
+                        'outputTokens': row['output_tokens'],
+                        'cacheCreationTokens': row['cache_creation_tokens'],
+                        'cacheReadTokens': row['cache_read_tokens'],
+                        'totalTokens': row['total_tokens']
+                    },
+                    'lastUpdated': row['last_updated'],
+                    'hostname': hostname
+                }
+                
+                if row['expires_at']:
+                    current_data[guid][hostname][project_name]['expiresAt'] = row['expires_at']
+                
+                if row['model_breakdowns']:
+                    current_data[guid][hostname][project_name]['modelBreakdowns'] = json.loads(row['model_breakdowns'])
+            
+            # Load historical data
+            cursor = conn.execute('''
+                SELECT * FROM usage_data WHERE is_current = 0
+            ''')
+            
+            for row in cursor:
+                guid = row['guid']
+                date = row['date']
+                hostname = row['hostname']
+                project_name = row['project_name']
+                
+                # Reconstruct nested structure
+                if guid not in historical_data:
+                    historical_data[guid] = {}
+                if date not in historical_data[guid]:
+                    historical_data[guid][date] = {}
+                if hostname not in historical_data[guid][date]:
+                    historical_data[guid][date][hostname] = {}
+                
+                historical_data[guid][date][hostname][project_name] = {
+                    'tokens': {
+                        'inputTokens': row['input_tokens'],
+                        'outputTokens': row['output_tokens'],
+                        'cacheCreationTokens': row['cache_creation_tokens'],
+                        'cacheReadTokens': row['cache_read_tokens'],
+                        'totalTokens': row['total_tokens']
+                    },
+                    'cost': row['cost'],
+                    'lastUpdated': row['last_updated']
+                }
+                
+                if row['model_breakdowns']:
+                    historical_data[guid][date][hostname][project_name]['modelBreakdowns'] = json.loads(row['model_breakdowns'])
+            
+            logging.info(f"Loaded data from database: {len(current_data)} GUIDs in current, {len(historical_data)} GUIDs in historical")
+    except Exception as e:
+        logging.error(f"Error loading from database: {e}")
+        # Don't raise - we want to continue operating even if DB load fails
 
 def get_date_key(timestamp_str: str) -> str:
     """Extract date key (YYYY-MM-DD) from ISO timestamp."""
@@ -128,6 +300,9 @@ def archive_to_historical(guid: str, hostname: str, project_name: str, project_d
     else:
         # Replace existing data (for active sessions)
         historical_data[guid][date_key][hostname][project_name] = archive_data
+    
+    # Save to database as historical data
+    save_to_db(guid, hostname, project_name, archive_data, is_current=False)
 
 
 def purge_expired_entries():
@@ -150,7 +325,7 @@ def purge_expired_entries():
                         expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
                         if current_time > expires_at:
                             # Archive before removing
-                            archive_to_historical(guid, hostname, project_name, project_data, is_final=True)
+                            archive_to_historical(guid, hostname, project_name, project_data)
                             projects_to_remove.append(project_name)
                             total_purged += 1
                             logging.info(f"Archiving and purging expired project: {guid}/{hostname}/{project_name}")
@@ -160,6 +335,15 @@ def purge_expired_entries():
             # Remove expired projects
             for project_name in projects_to_remove:
                 del projects[project_name]
+                # Also delete from database (mark as not current since it's been archived)
+                try:
+                    with get_db() as conn:
+                        conn.execute('''
+                            DELETE FROM usage_data 
+                            WHERE guid = ? AND hostname = ? AND project_name = ? AND is_current = 1
+                        ''', (guid, hostname, project_name))
+                except Exception as e:
+                    logging.error(f"Error deleting from database: {e}")
             
             # If all projects for a host are removed, mark host for removal
             if not projects:
@@ -238,6 +422,8 @@ def update_v2():
         projects = data.get('projects', [])
         expires_at = data.get('expiresAt')
         
+        logging.info(f"Update request received - GUID: {guid}, hostname: {hostname}, projects: {len(projects)}")
+        
         if not guid or not hostname:
             return jsonify({'error': 'Missing required fields: guid, hostname'}), 400
         
@@ -285,6 +471,9 @@ def update_v2():
             current_data[guid][hostname][project_name] = project_data
             updated_projects.append(project_name)
             
+            # Also save to database
+            save_to_db(guid, hostname, project_name, project_data, is_current=True)
+            
             # Don't archive to historical during active sessions - only archive when session expires
             # This prevents double-counting when the session later expires and gets archived again
         
@@ -307,7 +496,29 @@ def status_v2(guid):
     purge_expired_entries()  # Clean up before returning data
     
     if guid not in current_data:
-        return jsonify({'error': 'GUID not found'}), 404
+        # Log available GUIDs for debugging
+        logging.info(f"GUID {guid} not found. Available GUIDs: {list(current_data.keys())}")
+        # Try to load from database in case it wasn't loaded on startup
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute('''
+                SELECT COUNT(*) as count FROM usage_data WHERE guid = ? AND is_current = 1
+            ''', (guid,))
+            result = cursor.fetchone()
+            if result and result['count'] > 0:
+                logging.info(f"GUID {guid} found in database but not in memory, reloading...")
+                load_from_db()
+                if guid in current_data:
+                    logging.info(f"Successfully loaded GUID {guid} from database")
+                else:
+                    logging.error(f"Failed to load GUID {guid} from database even though it exists")
+            conn.close()
+        except Exception as e:
+            logging.error(f"Error checking database for GUID {guid}: {e}")
+        
+        if guid not in current_data:
+            return jsonify({'error': 'GUID not found'}), 404
     
     entries = []
     for hostname, projects in current_data[guid].items():
@@ -429,6 +640,93 @@ def daily_usage(guid):
                 
                 daily_data.append(day_totals)
     
+    # Add current session data for today if today is in the date range
+    today = datetime.now(timezone.utc).date()
+    today_str = today.strftime('%Y-%m-%d')
+    
+    if start_date <= today <= end_date and guid in current_data:
+        # Find or create today's entry
+        today_entry = None
+        for entry in daily_data:
+            if entry['date'] == today_str:
+                today_entry = entry
+                break
+        
+        if today_entry is None:
+            today_entry = {
+                'date': today_str,
+                'inputTokens': 0,
+                'outputTokens': 0,
+                'cacheCreationTokens': 0,
+                'cacheReadTokens': 0,
+                'totalTokens': 0,
+                'cost': 0,
+                'hosts': {},
+                'projects': {},
+                'modelBreakdowns': {}
+            }
+            daily_data.append(today_entry)
+        else:
+            # We need to reconstruct the aggregation dicts since we already converted to counts
+            # This is a bit tricky - we'll just use empty dicts since we lost the original host/project names
+            # But that's OK because we'll re-add them from current_data
+            today_entry['hosts'] = {}
+            today_entry['projects'] = {}
+            # Convert modelBreakdowns list back to dict for easier aggregation
+            mb_dict = {}
+            for mb in today_entry.get('modelBreakdowns', []):
+                mb_dict[mb['modelName']] = mb
+            today_entry['modelBreakdowns'] = mb_dict
+        
+        # Aggregate active session data
+        for hostname, projects in current_data[guid].items():
+            today_entry['hosts'][hostname] = True
+            
+            for project_name, project_data in projects.items():
+                today_entry['projects'][project_name] = True
+                
+                # Aggregate tokens
+                tokens = project_data.get('tokens', {})
+                today_entry['inputTokens'] += tokens.get('inputTokens', 0)
+                today_entry['outputTokens'] += tokens.get('outputTokens', 0)
+                today_entry['cacheCreationTokens'] += tokens.get('cacheCreationTokens', 0)
+                today_entry['cacheReadTokens'] += tokens.get('cacheReadTokens', 0)
+                today_entry['totalTokens'] += tokens.get('totalTokens', 0)
+                
+                # Calculate cost for active session
+                if 'modelBreakdowns' in project_data:
+                    for mb in project_data['modelBreakdowns']:
+                        today_entry['cost'] += mb.get('cost', 0)
+                        
+                        # Aggregate model breakdowns
+                        model_name = mb['modelName']
+                        if model_name not in today_entry['modelBreakdowns']:
+                            today_entry['modelBreakdowns'][model_name] = {
+                                'modelName': model_name,
+                                'inputTokens': 0,
+                                'outputTokens': 0,
+                                'cacheCreationInputTokens': 0,
+                                'cacheReadInputTokens': 0,
+                                'cost': 0
+                            }
+                        
+                        model = today_entry['modelBreakdowns'][model_name]
+                        model['inputTokens'] += mb.get('inputTokens', 0)
+                        model['outputTokens'] += mb.get('outputTokens', 0)
+                        model['cacheCreationInputTokens'] += mb.get('cacheCreationInputTokens', 0)
+                        model['cacheReadInputTokens'] += mb.get('cacheReadInputTokens', 0)
+                        model['cost'] += mb.get('cost', 0)
+                else:
+                    # Fallback cost calculation
+                    today_entry['cost'] += tokens.get('totalTokens', 0) * 0.000003
+        
+        # Convert sets to counts and lists
+        today_entry['hostCount'] = len(today_entry['hosts'])
+        today_entry['projectCount'] = len(today_entry['projects'])
+        today_entry['modelBreakdowns'] = list(today_entry['modelBreakdowns'].values())
+        del today_entry['hosts']
+        del today_entry['projects']
+    
     # Sort by date
     daily_data.sort(key=lambda x: x['date'])
     
@@ -440,80 +738,6 @@ def daily_usage(guid):
             'until': end_date.isoformat()
         }
     })
-
-
-@app.route('/v2/backfill', methods=['POST'])
-def backfill_v2():
-    """Backfill historical usage data directly to historical storage."""
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
-        
-        guid = data.get('guid')
-        hostname = data.get('hostname')
-        historical_data_input = data.get('historicalData', {})
-        
-        if not guid or not hostname or not historical_data_input:
-            return jsonify({'error': 'Missing required fields: guid, hostname, historicalData'}), 400
-        
-        # Process each date's data
-        dates_processed = 0
-        projects_processed = 0
-        
-        for date_str, projects in historical_data_input.items():
-            # Validate date format
-            try:
-                datetime.strptime(date_str, '%Y-%m-%d')
-            except ValueError:
-                return jsonify({'error': f'Invalid date format: {date_str}. Use YYYY-MM-DD'}), 400
-            
-            # Initialize nested structure if needed
-            if guid not in historical_data:
-                historical_data[guid] = {}
-            if date_str not in historical_data[guid]:
-                historical_data[guid][date_str] = {}
-            if hostname not in historical_data[guid][date_str]:
-                historical_data[guid][date_str][hostname] = {}
-            
-            # Process each project
-            for project_name, project_data in projects.items():
-                # Prepare data for archiving
-                archive_data = {
-                    'tokens': project_data.get('tokens', {}),
-                    'lastUpdated': f"{date_str}T23:59:59Z",  # End of day timestamp
-                    'cost': project_data.get('cost', 0)
-                }
-                
-                if 'modelBreakdowns' in project_data:
-                    archive_data['modelBreakdowns'] = project_data['modelBreakdowns']
-                
-                # Aggregate with existing historical data
-                if project_name in historical_data[guid][date_str][hostname]:
-                    historical_data[guid][date_str][hostname][project_name] = aggregate_tokens(
-                        historical_data[guid][date_str][hostname][project_name],
-                        archive_data
-                    )
-                else:
-                    historical_data[guid][date_str][hostname][project_name] = archive_data
-                
-                projects_processed += 1
-            
-            dates_processed += 1
-        
-        logging.info(f"Backfilled data for GUID: {guid}, hostname: {hostname}, dates: {dates_processed}, projects: {projects_processed}")
-        
-        return jsonify({
-            'status': 'success',
-            'guid': guid,
-            'hostname': hostname,
-            'dates_processed': dates_processed,
-            'projects_processed': projects_processed
-        })
-        
-    except Exception as e:
-        logging.error(f"Error in /v2/backfill: {str(e)}")
-        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/v2/monthly/<guid>')
@@ -625,777 +849,81 @@ def monthly_usage(guid):
     })
 
 
-# Dashboard HTML template
-DASHBOARD_HTML = '''<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Claude Usage Dashboard</title>
-    
-    <!-- Bootstrap 5.3 CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
-    
-    <style>
-        :root {
-            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --dark-bg: #0a0a0a;
-            --card-bg: #1a1a2e;
-            --card-border: #2a2a3e;
-            --text-muted: #6c757d;
-            --success-color: #4ade80;
-            --warning-color: #fbbf24;
-        }
+@app.route('/v2/backfill', methods=['POST'])
+def backfill_v2():
+    """Backfill historical usage data directly to historical storage."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No JSON data provided'}), 400
         
-        body {
-            background: var(--dark-bg);
-            color: #e0e0e0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            min-height: 100vh;
-        }
+        guid = data.get('guid')
+        hostname = data.get('hostname')
+        historical_data_input = data.get('historicalData', {})
         
-        .navbar {
-            background: var(--card-bg);
-            border-bottom: 1px solid var(--card-border);
-            padding: 1.5rem 0;
-        }
+        if not guid or not hostname or not historical_data_input:
+            return jsonify({'error': 'Missing required fields: guid, hostname, historicalData'}), 400
         
-        .navbar-brand {
-            font-size: 1.75rem;
-            font-weight: 300;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin: 0;
-        }
+        # Process each date's data
+        dates_processed = 0
+        projects_processed = 0
         
-        .container-fluid {
-            max-width: 1600px;
-        }
-        
-        /* Stats Cards */
-        .stats-row {
-            margin-bottom: 2rem;
-        }
-        
-        .stat-card {
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 0.75rem;
-            padding: 1.25rem;
-            height: 100%;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .stat-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: var(--primary-gradient);
-            transform: translateX(-100%);
-            transition: transform 0.3s ease;
-        }
-        
-        .stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.15);
-        }
-        
-        .stat-card:hover::before {
-            transform: translateX(0);
-        }
-        
-        .stat-icon {
-            width: 40px;
-            height: 40px;
-            border-radius: 0.5rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.25rem;
-            margin-bottom: 0.75rem;
-        }
-        
-        .stat-icon.tokens { background: rgba(102, 126, 234, 0.2); color: #667eea; }
-        .stat-icon.cost { background: rgba(74, 222, 128, 0.2); color: var(--success-color); }
-        .stat-icon.session { background: rgba(251, 191, 36, 0.2); color: var(--warning-color); }
-        .stat-icon.hosts { background: rgba(236, 72, 153, 0.2); color: #ec4899; }
-        .stat-icon.projects { background: rgba(79, 172, 254, 0.2); color: #4facfe; }
-        
-        .stat-label {
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 0.25rem;
-        }
-        
-        .stat-value {
-            font-size: 1.75rem;
-            font-weight: 600;
-            line-height: 1;
-            margin-bottom: 0.25rem;
-        }
-        
-        .stat-value.cost { color: var(--success-color); }
-        .stat-value.countdown { 
-            color: var(--warning-color); 
-            font-family: 'SF Mono', Monaco, 'Courier New', monospace;
-        }
-        
-        .stat-subtitle {
-            font-size: 0.8125rem;
-            color: var(--text-muted);
-        }
-        
-        /* Chart Section */
-        .chart-card {
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-            margin-bottom: 2rem;
-        }
-        
-        .chart-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-        }
-        
-        .chart-title {
-            font-size: 1.125rem;
-            font-weight: 500;
-            margin: 0;
-        }
-        
-        .chart-container {
-            height: 300px;
-            position: relative;
-        }
-        
-        .chart-bars {
-            display: flex;
-            align-items: flex-end;
-            height: 100%;
-            gap: 0.5rem;
-            padding: 0 0.5rem;
-        }
-        
-        .chart-bar {
-            flex: 1;
-            background: var(--primary-gradient);
-            border-radius: 0.25rem 0.25rem 0 0;
-            position: relative;
-            min-height: 4px;
-            transition: opacity 0.2s;
-            cursor: pointer;
-        }
-        
-        .chart-bar:hover {
-            opacity: 0.8;
-        }
-        
-        .chart-bar-label {
-            position: absolute;
-            bottom: -30px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 0.75rem;
-            color: var(--text-muted);
-            white-space: nowrap;
-        }
-        
-        /* Lists Section */
-        .list-card {
-            background: var(--card-bg);
-            border: 1px solid var(--card-border);
-            border-radius: 0.75rem;
-            padding: 1.5rem;
-            height: 100%;
-        }
-        
-        .list-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.25rem;
-        }
-        
-        .list-title {
-            font-size: 1.125rem;
-            font-weight: 500;
-            margin: 0;
-        }
-        
-        .list-badge {
-            background: var(--primary-gradient);
-            color: white;
-            padding: 0.25rem 0.75rem;
-            border-radius: 2rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-        }
-        
-        .list-item {
-            background: rgba(15, 15, 30, 0.5);
-            border: 1px solid var(--card-border);
-            border-radius: 0.5rem;
-            padding: 1rem;
-            margin-bottom: 0.75rem;
-            transition: all 0.2s;
-        }
-        
-        .list-item:hover {
-            background: rgba(15, 15, 30, 0.8);
-            border-color: rgba(102, 126, 234, 0.3);
-        }
-        
-        .list-item:last-child {
-            margin-bottom: 0;
-        }
-        
-        .list-item-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: start;
-            margin-bottom: 0.5rem;
-        }
-        
-        .list-item-name {
-            font-weight: 500;
-            word-break: break-word;
-        }
-        
-        .list-item-stats {
-            display: flex;
-            gap: 1.5rem;
-            font-size: 0.875rem;
-            color: var(--text-muted);
-            flex-wrap: wrap;
-        }
-        
-        .token-stat {
-            display: flex;
-            align-items: center;
-            gap: 0.375rem;
-        }
-        
-        .token-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-        }
-        
-        .token-dot.input { background: #667eea; }
-        .token-dot.output { background: #764ba2; }
-        .token-dot.cache-create { background: #f093fb; }
-        .token-dot.cache-read { background: #4facfe; }
-        
-        /* Loading and Error States */
-        .loading-container {
-            text-align: center;
-            padding: 4rem 2rem;
-        }
-        
-        .spinner-border {
-            width: 3rem;
-            height: 3rem;
-            border-width: 0.25rem;
-        }
-        
-        .error-alert {
-            background: rgba(220, 53, 69, 0.1);
-            border: 1px solid rgba(220, 53, 69, 0.3);
-            color: #f8d7da;
-        }
-        
-        /* Responsive */
-        @media (max-width: 1400px) {
-            .stat-value { font-size: 1.5rem; }
-        }
-        
-        @media (max-width: 992px) {
-            .stat-value { font-size: 1.75rem; }
-            .stats-row .col-lg { margin-bottom: 1rem; }
-        }
-        
-        /* Utilities */
-        .text-muted { color: var(--text-muted) !important; }
-        .small { font-size: 0.875rem; }
-    </style>
-</head>
-<body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-dark">
-        <div class="container-fluid">
-            <h1 class="navbar-brand mb-0">
-                <i class="bi bi-lightning-charge-fill me-2"></i>
-                Claude Usage Dashboard
-            </h1>
-            <span class="text-muted small">Real-time token usage and cost tracking</span>
-        </div>
-    </nav>
-
-    <!-- Main Container -->
-    <div class="container-fluid py-4">
-        <!-- Loading State -->
-        <div id="loading" class="loading-container">
-            <div class="spinner-border text-primary mb-3" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="text-muted">Loading dashboard data...</p>
-        </div>
-
-        <!-- Error State -->
-        <div id="error" class="alert error-alert d-none" role="alert">
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-            <span id="errorMessage">Error loading data</span>
-        </div>
-
-        <!-- Dashboard Content -->
-        <div id="dashboard" class="d-none">
-            <!-- Stats Cards -->
-            <div class="row stats-row g-3">
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon tokens">
-                            <i class="bi bi-coin"></i>
-                        </div>
-                        <div class="stat-label">Total Tokens Today</div>
-                        <div class="stat-value" id="totalTokens">0</div>
-                        <div class="stat-subtitle" id="tokenBreakdown">Loading...</div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon cost">
-                            <i class="bi bi-currency-dollar"></i>
-                        </div>
-                        <div class="stat-label">Total Cost Today</div>
-                        <div class="stat-value cost" id="totalCost">$0.00</div>
-                        <div class="stat-subtitle">USD</div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon cost">
-                            <i class="bi bi-clock-history"></i>
-                        </div>
-                        <div class="stat-label">Current Session Cost</div>
-                        <div class="stat-value cost" id="sessionCost">$0.00</div>
-                        <div class="stat-subtitle">Since session start</div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon session">
-                            <i class="bi bi-hourglass-split"></i>
-                        </div>
-                        <div class="stat-label">Session Ends In</div>
-                        <div class="stat-value countdown" id="sessionCountdown">--:--:--</div>
-                        <div class="stat-subtitle" id="sessionEndTime">Calculating...</div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon cost">
-                            <i class="bi bi-calendar-month"></i>
-                        </div>
-                        <div class="stat-label">Total Cost This Month</div>
-                        <div class="stat-value cost" id="monthCost">$0.00</div>
-                        <div class="stat-subtitle" id="monthName">Loading...</div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon hosts">
-                            <i class="bi bi-pc-display"></i>
-                        </div>
-                        <div class="stat-label">Active Hosts</div>
-                        <div class="stat-value" id="hostCount">0</div>
-                        <div class="stat-subtitle">machines reporting</div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-sm-6 col-md-4 col-lg">
-                    <div class="stat-card">
-                        <div class="stat-icon projects">
-                            <i class="bi bi-folder2-open"></i>
-                        </div>
-                        <div class="stat-label">Active Projects</div>
-                        <div class="stat-value" id="projectCount">0</div>
-                        <div class="stat-subtitle">unique projects</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Chart -->
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h2 class="chart-title">
-                        <i class="bi bi-graph-up me-2"></i>
-                        Token Usage - Last 7 Days
-                    </h2>
-                    <span class="text-muted small">Daily totals</span>
-                </div>
-                <div class="chart-container">
-                    <div class="chart-bars" id="dailyChart"></div>
-                </div>
-            </div>
-
-            <!-- Lists -->
-            <div class="row g-3">
-                <div class="col-12 col-lg-4">
-                    <div class="list-card">
-                        <div class="list-header">
-                            <h3 class="list-title">
-                                <i class="bi bi-hdd-network me-2"></i>
-                                Active Hosts
-                            </h3>
-                            <span class="list-badge" id="hostBadge">0</span>
-                        </div>
-                        <div id="hostsList"></div>
-                    </div>
-                </div>
-                
-                <div class="col-12 col-lg-8">
-                    <div class="list-card">
-                        <div class="list-header">
-                            <h3 class="list-title">
-                                <i class="bi bi-folder-fill me-2"></i>
-                                Projects
-                            </h3>
-                            <span class="list-badge" id="projectBadge">0</span>
-                        </div>
-                        <div id="projectsList"></div>
-                    </div>
-                </div>
-            </div>
+        for date_str, projects in historical_data_input.items():
+            # Validate date format
+            try:
+                datetime.strptime(date_str, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({'error': f'Invalid date format: {date_str}. Use YYYY-MM-DD'}), 400
             
-            <!-- Footer -->
-            <div class="text-center mt-4">
-                <p class="text-muted small mb-0" id="lastUpdated">Last updated: Never</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Bootstrap JS (optional, but includes Popper for tooltips) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <script>
-        const guid = window.location.pathname.substring(1);
-        const apiBase = window.location.origin;
-
-        function formatNumber(num) {
-            if (num >= 1e9) return (num / 1e9).toFixed(2) + 'B';
-            if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
-            if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
-            return num.toLocaleString();
-        }
-
-        function formatCost(cost) {
-            return '$' + cost.toFixed(2);
-        }
-
-        function calculateSessionEnd() {
-            const now = new Date();
-            const utcHour = now.getUTCHours();
-            const nextBoundary = Math.ceil(utcHour / 5) * 5;
+            # Initialize nested structure if needed
+            if guid not in historical_data:
+                historical_data[guid] = {}
+            if date_str not in historical_data[guid]:
+                historical_data[guid][date_str] = {}
+            if hostname not in historical_data[guid][date_str]:
+                historical_data[guid][date_str][hostname] = {}
             
-            const sessionEnd = new Date(now);
-            sessionEnd.setUTCHours(nextBoundary, 0, 0, 0);
-            
-            if (nextBoundary >= 24) {
-                sessionEnd.setUTCDate(sessionEnd.getUTCDate() + 1);
-                sessionEnd.setUTCHours(nextBoundary % 24, 0, 0, 0);
-            }
-            
-            return sessionEnd;
-        }
-
-        function formatCountdown(milliseconds) {
-            const totalSeconds = Math.floor(milliseconds / 1000);
-            const hours = Math.floor(totalSeconds / 3600);
-            const minutes = Math.floor((totalSeconds % 3600) / 60);
-            const seconds = totalSeconds % 60;
-            
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        }
-
-        function getMonthName(date) {
-            const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                           'July', 'August', 'September', 'October', 'November', 'December'];
-            return months[date.getMonth()] + ' ' + date.getFullYear();
-        }
-
-        async function fetchDashboardData() {
-            try {
-                const statusResponse = await fetch(`${apiBase}/v2/status/${guid}`);
-                if (!statusResponse.ok) {
-                    throw new Error('Failed to fetch status data');
+            # Process each project
+            for project_name, project_data in projects.items():
+                # Prepare data for archiving
+                archive_data = {
+                    'tokens': project_data.get('tokens', {}),
+                    'lastUpdated': f"{date_str}T23:59:59Z",  # End of day timestamp
+                    'cost': project_data.get('cost', 0)
                 }
-                const statusData = await statusResponse.json();
-
-                const today = new Date();
-                const sevenDaysAgo = new Date(today);
-                sevenDaysAgo.setDate(today.getDate() - 6);
-
-                const dailyResponse = await fetch(
-                    `${apiBase}/v2/daily/${guid}?since=${sevenDaysAgo.toISOString()}&until=${today.toISOString()}`
-                );
-                if (!dailyResponse.ok) {
-                    throw new Error('Failed to fetch daily data');
-                }
-                const dailyData = await dailyResponse.json();
-
-                const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-                const monthlyResponse = await fetch(
-                    `${apiBase}/v2/monthly/${guid}?since=${firstOfMonth.toISOString()}&until=${today.toISOString()}`
-                );
-                let monthlyData = null;
-                if (monthlyResponse.ok) {
-                    monthlyData = await monthlyResponse.json();
-                }
-
-                return { status: statusData, daily: dailyData, monthly: monthlyData };
-            } catch (error) {
-                console.error('Error fetching data:', error);
-                throw error;
-            }
-        }
-
-        function updateDashboard(data) {
-            const { status, daily, monthly } = data;
-
-            // Calculate today's totals
-            const today = new Date().toISOString().split('T')[0];
-            const todayData = daily.daily.find((d) => d.date === today) || {
-                totalTokens: 0,
-                cost: 0,
-                inputTokens: 0,
-                outputTokens: 0,
-                cacheCreationTokens: 0,
-                cacheReadTokens: 0,
-            };
-
-            // Update stats cards
-            document.getElementById('totalTokens').textContent = formatNumber(todayData.totalTokens);
-            document.getElementById('totalCost').textContent = formatCost(todayData.cost);
-
-            // Token breakdown
-            const breakdown = `Input: ${formatNumber(todayData.inputTokens)} • Output: ${formatNumber(todayData.outputTokens)} • Cache: ${formatNumber(todayData.cacheCreationTokens + todayData.cacheReadTokens)}`;
-            document.getElementById('tokenBreakdown').textContent = breakdown;
-
-            // Calculate current session cost
-            let sessionCost = 0;
-            status.entries.forEach((entry) => {
-                entry.projects.forEach((project) => {
-                    if (project.modelBreakdowns && project.modelBreakdowns.length > 0) {
-                        project.modelBreakdowns.forEach(mb => {
-                            sessionCost += mb.cost || 0;
-                        });
-                    } else {
-                        const totalTokens = project.tokens.inputTokens + project.tokens.outputTokens + 
-                                           project.tokens.cacheCreationTokens + project.tokens.cacheReadTokens;
-                        sessionCost += totalTokens * 0.000003;
-                    }
-                });
-            });
-            document.getElementById('sessionCost').textContent = formatCost(sessionCost);
-
-            // Update session countdown
-            const sessionEnd = calculateSessionEnd();
-            const updateCountdown = () => {
-                const now = new Date();
-                const remaining = sessionEnd - now;
-                if (remaining > 0) {
-                    document.getElementById('sessionCountdown').textContent = formatCountdown(remaining);
-                    document.getElementById('sessionEndTime').textContent = sessionEnd.toLocaleTimeString();
-                } else {
-                    const newSessionEnd = calculateSessionEnd();
-                    sessionEnd.setTime(newSessionEnd.getTime());
-                }
-            };
-            updateCountdown();
-            if (window.countdownInterval) {
-                clearInterval(window.countdownInterval);
-            }
-            window.countdownInterval = setInterval(updateCountdown, 1000);
-
-            // Calculate monthly cost
-            const currentMonth = new Date();
-            document.getElementById('monthName').textContent = getMonthName(currentMonth);
+                
+                if 'modelBreakdowns' in project_data:
+                    archive_data['modelBreakdowns'] = project_data['modelBreakdowns']
+                
+                # Aggregate with existing historical data
+                if project_name in historical_data[guid][date_str][hostname]:
+                    historical_data[guid][date_str][hostname][project_name] = aggregate_tokens(
+                        historical_data[guid][date_str][hostname][project_name],
+                        archive_data
+                    )
+                else:
+                    historical_data[guid][date_str][hostname][project_name] = archive_data
+                
+                # Save to database
+                save_to_db(guid, hostname, project_name, archive_data, is_current=False)
+                
+                projects_processed += 1
             
-            if (monthly && monthly.monthly && monthly.monthly.length > 0) {
-                const currentMonthData = monthly.monthly[0];
-                document.getElementById('monthCost').textContent = formatCost(currentMonthData.cost);
-            } else {
-                let monthCost = 0;
-                const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-                daily.daily.forEach(day => {
-                    const dayDate = new Date(day.date);
-                    if (dayDate >= monthStart) {
-                        monthCost += day.cost;
-                    }
-                });
-                document.getElementById('monthCost').textContent = formatCost(monthCost);
-            }
-
-            // Host and project counts
-            const uniqueHosts = new Set();
-            const uniqueProjects = new Set();
-            const projectTokens = {};
-
-            status.entries.forEach((entry) => {
-                uniqueHosts.add(entry.hostname);
-                entry.projects.forEach((project) => {
-                    uniqueProjects.add(project.projectName);
-                    if (!projectTokens[project.projectName]) {
-                        projectTokens[project.projectName] = {
-                            tokens: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
-                            hosts: new Set(),
-                        };
-                    }
-                    projectTokens[project.projectName].tokens.inputTokens += project.tokens.inputTokens;
-                    projectTokens[project.projectName].tokens.outputTokens += project.tokens.outputTokens;
-                    projectTokens[project.projectName].tokens.cacheCreationTokens += project.tokens.cacheCreationTokens;
-                    projectTokens[project.projectName].tokens.cacheReadTokens += project.tokens.cacheReadTokens;
-                    projectTokens[project.projectName].hosts.add(entry.hostname);
-                });
-            });
-
-            document.getElementById('hostCount').textContent = uniqueHosts.size;
-            document.getElementById('projectCount').textContent = uniqueProjects.size;
-            document.getElementById('hostBadge').textContent = uniqueHosts.size;
-            document.getElementById('projectBadge').textContent = uniqueProjects.size;
-
-            // Update hosts list
-            const hostsList = document.getElementById('hostsList');
-            hostsList.innerHTML = '';
-            uniqueHosts.forEach((hostname) => {
-                const hostProjects = status.entries.filter((e) => e.hostname === hostname).flatMap((e) => e.projects);
-                const totalTokens = hostProjects.reduce(
-                    (sum, p) =>
-                        sum +
-                        p.tokens.inputTokens +
-                        p.tokens.outputTokens +
-                        p.tokens.cacheCreationTokens +
-                        p.tokens.cacheReadTokens,
-                    0
-                );
-
-                const hostItem = document.createElement('div');
-                hostItem.className = 'list-item';
-                hostItem.innerHTML = `
-                    <div class="list-item-header">
-                        <div class="list-item-name">${hostname}</div>
-                    </div>
-                    <div class="list-item-stats">
-                        <span><i class="bi bi-folder2 me-1"></i>${hostProjects.length} projects</span>
-                        <span><i class="bi bi-coin me-1"></i>${formatNumber(totalTokens)} tokens</span>
-                    </div>
-                `;
-                hostsList.appendChild(hostItem);
-            });
-
-            // Update projects list
-            const projectsList = document.getElementById('projectsList');
-            projectsList.innerHTML = '';
-            Object.entries(projectTokens)
-                .sort((a, b) => {
-                    const totalA =
-                        a[1].tokens.inputTokens +
-                        a[1].tokens.outputTokens +
-                        a[1].tokens.cacheCreationTokens +
-                        a[1].tokens.cacheReadTokens;
-                    const totalB =
-                        b[1].tokens.inputTokens +
-                        b[1].tokens.outputTokens +
-                        b[1].tokens.cacheCreationTokens +
-                        b[1].tokens.cacheReadTokens;
-                    return totalB - totalA;
-                })
-                .forEach(([projectName, data]) => {
-                    const projectItem = document.createElement('div');
-                    projectItem.className = 'list-item';
-                    projectItem.innerHTML = `
-                        <div class="list-item-header">
-                            <div class="list-item-name">${projectName}</div>
-                        </div>
-                        <div class="list-item-stats">
-                            <div class="token-stat"><span class="token-dot input"></span> ${formatNumber(data.tokens.inputTokens)}</div>
-                            <div class="token-stat"><span class="token-dot output"></span> ${formatNumber(data.tokens.outputTokens)}</div>
-                            <div class="token-stat"><span class="token-dot cache-create"></span> ${formatNumber(data.tokens.cacheCreationTokens)}</div>
-                            <div class="token-stat"><span class="token-dot cache-read"></span> ${formatNumber(data.tokens.cacheReadTokens)}</div>
-                        </div>
-                    `;
-                    projectsList.appendChild(projectItem);
-                });
-
-            // Update daily chart
-            const chartBar = document.getElementById('dailyChart');
-            chartBar.innerHTML = '';
-
-            const maxTokens = Math.max(...daily.daily.map((d) => d.totalTokens));
-            daily.daily.forEach((day) => {
-                const bar = document.createElement('div');
-                bar.className = 'chart-bar';
-                const height = (day.totalTokens / maxTokens) * 100;
-                bar.style.height = `${height}%`;
-                bar.title = `${day.date}: ${formatNumber(day.totalTokens)} tokens, ${formatCost(day.cost)}`;
-
-                const label = document.createElement('div');
-                label.className = 'chart-bar-label';
-                label.textContent = new Date(day.date).toLocaleDateString('en-US', { weekday: 'short' });
-                bar.appendChild(label);
-
-                chartBar.appendChild(bar);
-            });
-
-            // Update last updated time
-            document.getElementById('lastUpdated').textContent = 
-                `Last updated: ${new Date().toLocaleTimeString()}`;
-
-            // Show dashboard, hide loading
-            document.getElementById('loading').classList.add('d-none');
-            document.getElementById('dashboard').classList.remove('d-none');
-        }
-
-        function showError(message) {
-            document.getElementById('loading').classList.add('d-none');
-            document.getElementById('error').classList.remove('d-none');
-            document.getElementById('errorMessage').textContent = message;
-        }
-
-        // Initial load
-        fetchDashboardData()
-            .then(updateDashboard)
-            .catch(error => showError(error.message));
-
-        // Refresh every 30 seconds
-        setInterval(() => {
-            fetchDashboardData()
-                .then(updateDashboard)
-                .catch(error => console.error('Refresh error:', error));
-        }, 30000);
-    </script>
-</body>
-</html>
-'''
+            dates_processed += 1
+        
+        logging.info(f"Backfilled data for GUID: {guid}, hostname: {hostname}, dates: {dates_processed}, projects: {projects_processed}")
+        
+        return jsonify({
+            'status': 'success',
+            'guid': guid,
+            'hostname': hostname,
+            'dates_processed': dates_processed,
+            'projects_processed': projects_processed
+        })
+        
+    except Exception as e:
+        logging.error(f"Error in /v2/backfill: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/<guid>')
@@ -1406,8 +934,24 @@ def dashboard(guid):
     if not re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', guid):
         return 'Invalid GUID format', 400
     
-    return render_template_string(DASHBOARD_HTML)
+    # Read the dashboard HTML file
+    import os
+    dashboard_path = os.path.join(os.path.dirname(__file__), 'dashboard_bootstrap.html')
+    try:
+        with open(dashboard_path, 'r') as f:
+            dashboard_html = f.read()
+        return dashboard_html
+    except FileNotFoundError:
+        return 'Dashboard file not found', 500
 
+
+# Initialize database and load data on startup
+try:
+    init_database()
+    load_from_db()
+except Exception as e:
+    logging.error(f"Failed to initialize database: {e}")
+    # Continue without database - will operate in memory only
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)

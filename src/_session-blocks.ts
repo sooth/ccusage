@@ -8,14 +8,43 @@ import { getTotalTokens } from './_token-utils.ts';
 export const DEFAULT_SESSION_DURATION_HOURS = 5;
 
 /**
- * Floors a timestamp to the beginning of the hour in UTC
+ * Floor a timestamp to the Claude session boundary (0, 5, 10, 15, 20 UTC)
  * @param timestamp - The timestamp to floor
- * @returns New Date object floored to the UTC hour
+ * @returns New Date object floored to the session boundary
  */
-function floorToHour(timestamp: Date): Date {
+function floorToSessionBoundary(timestamp: Date): Date {
 	const floored = new Date(timestamp);
-	floored.setUTCMinutes(0, 0, 0);
+	const hour = floored.getUTCHours();
+	// Floor to nearest 5-hour boundary: 0, 5, 10, 15, 20
+	const boundaryHour = Math.floor(hour / 5) * 5;
+	floored.setUTCHours(boundaryHour, 0, 0, 0);
 	return floored;
+}
+
+// Keep the old function name for compatibility
+const floorToHour = floorToSessionBoundary;
+
+/**
+ * Calculate the next Claude session boundary (0, 5, 10, 15, 20 UTC)
+ * @param timestamp - The timestamp to calculate from
+ * @returns New Date object at the next session boundary
+ */
+function getNextSessionBoundary(timestamp: Date): Date {
+	const next = new Date(timestamp);
+	const hour = next.getUTCHours();
+	// Get next 5-hour boundary
+	const nextBoundaryHour = Math.ceil((hour + 1) / 5) * 5;
+
+	if (nextBoundaryHour >= 24) {
+		// Move to next day
+		next.setUTCDate(next.getUTCDate() + 1);
+		next.setUTCHours(nextBoundaryHour % 24, 0, 0, 0);
+	}
+	else {
+		next.setUTCHours(nextBoundaryHour, 0, 0, 0);
+	}
+
+	return next;
 }
 
 /**
@@ -176,7 +205,8 @@ export function identifySessionBlocks(
  * @returns Session block with aggregated data
  */
 function createBlock(startTime: Date, entries: LoadedUsageEntry[], now: Date, sessionDurationMs: number): SessionBlock {
-	const endTime = new Date(startTime.getTime() + sessionDurationMs);
+	// Calculate end time based on Claude's session boundaries
+	const endTime = getNextSessionBoundary(startTime);
 	const lastEntry = entries[entries.length - 1];
 	const actualEndTime = lastEntry != null ? lastEntry.timestamp : startTime;
 	const isActive = now.getTime() - actualEndTime.getTime() < sessionDurationMs && now < endTime;
