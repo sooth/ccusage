@@ -10,8 +10,11 @@ from flask_cors import CORS
 from datetime import datetime, timezone, timedelta
 import logging
 import os
+import json
+import sqlite3
 from typing import Dict, Any, List, Optional
 from collections import defaultdict
+from contextlib import contextmanager
 
 app = Flask(__name__)
 
@@ -26,13 +29,182 @@ else:
     # Local development logging
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# In-memory storage
+# Database configuration
+DB_PATH = os.environ.get('CLAUDE_USAGE_DB', 'claude_usage.db')
+
+# In-memory storage (will be backed by SQLite)
 # Current session data: {guid: {hostname: {projectName: {data}}}}
 current_data: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
 # Historical data: {guid: {date: {hostname: {projectName: {aggregated_data}}}}}
 historical_data: Dict[str, Dict[str, Dict[str, Dict[str, Any]]]] = {}
 
+
+# Database helper functions
+def init_database():
+    """Initialize database with schema."""
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS usage_data (
+                guid TEXT NOT NULL,
+                hostname TEXT NOT NULL,
+                project_name TEXT NOT NULL,
+                date TEXT NOT NULL,
+                is_current BOOLEAN DEFAULT 1,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                cache_creation_tokens INTEGER DEFAULT 0,
+                cache_read_tokens INTEGER DEFAULT 0,
+                total_tokens INTEGER DEFAULT 0,
+                cost REAL DEFAULT 0,
+                expires_at TEXT,
+                last_updated TEXT,
+                model_breakdowns TEXT,
+                PRIMARY KEY (guid, hostname, project_name, date, is_current)
+            )
+        ''')
+        
+        # Create indexes for performance
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_guid_current ON usage_data(guid, is_current)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_date ON usage_data(date)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_expires ON usage_data(expires_at)')
+        conn.commit()
+        logging.info("Database initialized successfully")
+    except Exception as e:
+        logging.error(f"Error initializing database: {e}")
+        raise
+    finally:
+        conn.close()
+
+@contextmanager
+def get_db():
+    """Database connection context manager."""
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+def save_to_db(guid: str, hostname: str, project_name: str, project_data: Dict[str, Any], is_current: bool = True):
+    """Save data to database."""
+    try:
+        with get_db() as conn:
+            date_key = get_date_key(project_data.get('lastUpdated', ''))
+            tokens = project_data.get('tokens', {})
+            
+            # Calculate cost from model breakdowns if available
+            cost = 0
+            if 'modelBreakdowns' in project_data:
+                for mb in project_data['modelBreakdowns']:
+                    cost += mb.get('cost', 0)
+            else:
+                cost = tokens.get('totalTokens', 0) * 0.000003
+            
+            conn.execute('''
+                INSERT OR REPLACE INTO usage_data 
+                (guid, hostname, project_name, date, is_current, 
+                 input_tokens, output_tokens, cache_creation_tokens, 
+                 cache_read_tokens, total_tokens, cost, expires_at, 
+                 last_updated, model_breakdowns)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                guid, hostname, project_name, date_key, is_current,
+                tokens.get('inputTokens', 0),
+                tokens.get('outputTokens', 0),
+                tokens.get('cacheCreationTokens', 0),
+                tokens.get('cacheReadTokens', 0),
+                tokens.get('totalTokens', 0),
+                cost,
+                project_data.get('expiresAt'),
+                project_data.get('lastUpdated'),
+                json.dumps(project_data.get('modelBreakdowns', []))
+            ))
+    except Exception as e:
+        logging.error(f"Error saving to database: {e}")
+        # Don't raise - we want to continue operating even if DB save fails
+
+def load_from_db():
+    """Load data from database on startup."""
+    try:
+        with get_db() as conn:
+            # Load current data
+            cursor = conn.execute('''
+                SELECT * FROM usage_data WHERE is_current = 1
+            ''')
+            
+            for row in cursor:
+                guid = row['guid']
+                hostname = row['hostname']
+                project_name = row['project_name']
+                
+                # Reconstruct nested structure
+                if guid not in current_data:
+                    current_data[guid] = {}
+                if hostname not in current_data[guid]:
+                    current_data[guid][hostname] = {}
+                
+                current_data[guid][hostname][project_name] = {
+                    'tokens': {
+                        'inputTokens': row['input_tokens'],
+                        'outputTokens': row['output_tokens'],
+                        'cacheCreationTokens': row['cache_creation_tokens'],
+                        'cacheReadTokens': row['cache_read_tokens'],
+                        'totalTokens': row['total_tokens']
+                    },
+                    'lastUpdated': row['last_updated'],
+                    'hostname': hostname
+                }
+                
+                if row['expires_at']:
+                    current_data[guid][hostname][project_name]['expiresAt'] = row['expires_at']
+                
+                if row['model_breakdowns']:
+                    current_data[guid][hostname][project_name]['modelBreakdowns'] = json.loads(row['model_breakdowns'])
+            
+            # Load historical data
+            cursor = conn.execute('''
+                SELECT * FROM usage_data WHERE is_current = 0
+            ''')
+            
+            for row in cursor:
+                guid = row['guid']
+                date = row['date']
+                hostname = row['hostname']
+                project_name = row['project_name']
+                
+                # Reconstruct nested structure
+                if guid not in historical_data:
+                    historical_data[guid] = {}
+                if date not in historical_data[guid]:
+                    historical_data[guid][date] = {}
+                if hostname not in historical_data[guid][date]:
+                    historical_data[guid][date][hostname] = {}
+                
+                historical_data[guid][date][hostname][project_name] = {
+                    'tokens': {
+                        'inputTokens': row['input_tokens'],
+                        'outputTokens': row['output_tokens'],
+                        'cacheCreationTokens': row['cache_creation_tokens'],
+                        'cacheReadTokens': row['cache_read_tokens'],
+                        'totalTokens': row['total_tokens']
+                    },
+                    'cost': row['cost'],
+                    'lastUpdated': row['last_updated']
+                }
+                
+                if row['model_breakdowns']:
+                    historical_data[guid][date][hostname][project_name]['modelBreakdowns'] = json.loads(row['model_breakdowns'])
+            
+            logging.info(f"Loaded data from database: {len(current_data)} GUIDs in current, {len(historical_data)} GUIDs in historical")
+    except Exception as e:
+        logging.error(f"Error loading from database: {e}")
+        # Don't raise - we want to continue operating even if DB load fails
 
 def get_date_key(timestamp_str: str) -> str:
     """Extract date key (YYYY-MM-DD) from ISO timestamp."""
@@ -81,8 +253,14 @@ def aggregate_tokens(existing: Dict[str, Any], new_data: Dict[str, Any]) -> Dict
     return existing
 
 
-def archive_to_historical(guid: str, hostname: str, project_name: str, project_data: Dict[str, Any]):
-    """Archive current data to historical storage."""
+def archive_to_historical(guid: str, hostname: str, project_name: str, project_data: Dict[str, Any], is_final: bool = True):
+    """Archive current data to historical storage.
+    
+    Args:
+        is_final: Should always be True. Archives expired session data by aggregating 
+                  with any existing historical data for the same project/date.
+                  This prevents data loss when multiple sessions occur on the same day.
+    """
     date_key = get_date_key(project_data.get('lastUpdated', ''))
     
     # Initialize nested structure if needed
@@ -93,24 +271,38 @@ def archive_to_historical(guid: str, hostname: str, project_name: str, project_d
     if hostname not in historical_data[guid][date_key]:
         historical_data[guid][date_key][hostname] = {}
     
+    # Calculate cost from model breakdowns if available
+    cost = 0
+    if 'modelBreakdowns' in project_data:
+        for mb in project_data['modelBreakdowns']:
+            cost += mb.get('cost', 0)
+    else:
+        # Fallback to simple calculation
+        cost = project_data['tokens']['totalTokens'] * 0.000003
+    
     # Prepare data for archiving (remove expiration)
     archive_data = {
         'tokens': project_data['tokens'],
         'lastUpdated': project_data['lastUpdated'],
-        'cost': project_data['tokens']['totalTokens'] * 0.000001  # Simplified cost calculation
+        'cost': cost
     }
     
     if 'modelBreakdowns' in project_data:
         archive_data['modelBreakdowns'] = project_data['modelBreakdowns']
     
-    # Aggregate with existing historical data
-    if project_name in historical_data[guid][date_key][hostname]:
+    # For active sessions, replace the data. For expired sessions, aggregate.
+    if is_final and project_name in historical_data[guid][date_key][hostname]:
+        # Aggregate with existing historical data (for expired sessions)
         historical_data[guid][date_key][hostname][project_name] = aggregate_tokens(
             historical_data[guid][date_key][hostname][project_name],
             archive_data
         )
     else:
+        # Replace existing data (for active sessions)
         historical_data[guid][date_key][hostname][project_name] = archive_data
+    
+    # Save to database as historical data
+    save_to_db(guid, hostname, project_name, archive_data, is_current=False)
 
 
 def purge_expired_entries():
@@ -143,6 +335,15 @@ def purge_expired_entries():
             # Remove expired projects
             for project_name in projects_to_remove:
                 del projects[project_name]
+                # Also delete from database (mark as not current since it's been archived)
+                try:
+                    with get_db() as conn:
+                        conn.execute('''
+                            DELETE FROM usage_data 
+                            WHERE guid = ? AND hostname = ? AND project_name = ? AND is_current = 1
+                        ''', (guid, hostname, project_name))
+                except Exception as e:
+                    logging.error(f"Error deleting from database: {e}")
             
             # If all projects for a host are removed, mark host for removal
             if not projects:
@@ -268,8 +469,11 @@ def update_v2():
             current_data[guid][hostname][project_name] = project_data
             updated_projects.append(project_name)
             
-            # Also update historical data for today
-            archive_to_historical(guid, hostname, project_name, project_data)
+            # Also save to database
+            save_to_db(guid, hostname, project_name, project_data, is_current=True)
+            
+            # Don't archive to historical during active sessions - only archive when session expires
+            # This prevents double-counting when the session later expires and gets archived again
         
         logging.info(f"Updated data for GUID: {guid}, hostname: {hostname}, projects: {updated_projects}")
         return jsonify({
@@ -620,6 +824,14 @@ def monthly_usage(guid):
         }
     })
 
+
+# Initialize database and load data on startup
+try:
+    init_database()
+    load_from_db()
+except Exception as e:
+    logging.error(f"Failed to initialize database: {e}")
+    # Continue without database - will operate in memory only
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001)
