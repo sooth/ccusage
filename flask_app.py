@@ -576,9 +576,17 @@ def daily_usage(guid):
     # Collect daily data
     daily_data = []
     
+    # Get today's date to exclude it from historical data
+    today = datetime.now(timezone.utc).date()
+    today_str = today.strftime('%Y-%m-%d')
+    
     if guid in historical_data:
         for date_str, hosts in historical_data[guid].items():
             date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+            
+            # Skip today's historical data - we'll use current session data instead
+            if date_str == today_str:
+                continue
             
             # Check if date is in range
             if start_date <= date_obj <= end_date:
@@ -642,42 +650,22 @@ def daily_usage(guid):
                 daily_data.append(day_totals)
     
     # Add current session data for today if today is in the date range
-    today = datetime.now(timezone.utc).date()
-    today_str = today.strftime('%Y-%m-%d')
+    # Note: We've already excluded today from historical data above
     
     if start_date <= today <= end_date and guid in current_data:
-        # Find or create today's entry
-        today_entry = None
-        for entry in daily_data:
-            if entry['date'] == today_str:
-                today_entry = entry
-                break
-        
-        if today_entry is None:
-            today_entry = {
-                'date': today_str,
-                'inputTokens': 0,
-                'outputTokens': 0,
-                'cacheCreationTokens': 0,
-                'cacheReadTokens': 0,
-                'totalTokens': 0,
-                'cost': 0,
-                'hosts': {},
-                'projects': {},
-                'modelBreakdowns': {}
-            }
-            daily_data.append(today_entry)
-        else:
-            # We need to reconstruct the aggregation dicts since we already converted to counts
-            # This is a bit tricky - we'll just use empty dicts since we lost the original host/project names
-            # But that's OK because we'll re-add them from current_data
-            today_entry['hosts'] = {}
-            today_entry['projects'] = {}
-            # Convert modelBreakdowns list back to dict for easier aggregation
-            mb_dict = {}
-            for mb in today_entry.get('modelBreakdowns', []):
-                mb_dict[mb['modelName']] = mb
-            today_entry['modelBreakdowns'] = mb_dict
+        # Always create a fresh entry for today from current session data
+        today_entry = {
+            'date': today_str,
+            'inputTokens': 0,
+            'outputTokens': 0,
+            'cacheCreationTokens': 0,
+            'cacheReadTokens': 0,
+            'totalTokens': 0,
+            'cost': 0,
+            'hosts': {},
+            'projects': {},
+            'modelBreakdowns': {}
+        }
         
         # Aggregate active session data
         for hostname, projects in current_data[guid].items():
@@ -733,6 +721,9 @@ def daily_usage(guid):
         today_entry['modelBreakdowns'] = list(today_entry['modelBreakdowns'].values())
         del today_entry['hosts']
         del today_entry['projects']
+        
+        # Add today's entry to the daily data
+        daily_data.append(today_entry)
     
     # Sort by date
     daily_data.sort(key=lambda x: x['date'])
@@ -902,14 +893,9 @@ def backfill_v2():
                 if 'modelBreakdowns' in project_data:
                     archive_data['modelBreakdowns'] = project_data['modelBreakdowns']
                 
-                # Aggregate with existing historical data
-                if project_name in historical_data[guid][date_str][hostname]:
-                    historical_data[guid][date_str][hostname][project_name] = aggregate_tokens(
-                        historical_data[guid][date_str][hostname][project_name],
-                        archive_data
-                    )
-                else:
-                    historical_data[guid][date_str][hostname][project_name] = archive_data
+                # Replace existing historical data (don't aggregate for backfill)
+                # Backfill should always replace, not accumulate
+                historical_data[guid][date_str][hostname][project_name] = archive_data
                 
                 # Save to database
                 save_to_db(guid, hostname, project_name, archive_data, is_current=False)
