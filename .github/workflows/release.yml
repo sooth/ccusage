@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run tests
+        run: bun test
+
+      - name: Build project
+        run: bun run build
+
+      - name: Build binaries
+        run: |
+          mkdir -p binaries
+          
+          # Build Linux x64 binary
+          echo "Building Linux x64 binary..."
+          bun build ./dist/index.js --compile --target=bun-linux-x64 --outfile binaries/ccusage-linux-x64
+          
+          # Build macOS x64 binary (cross-compile from Linux)
+          echo "Building macOS x64 binary..."
+          bun build ./dist/index.js --compile --target=bun-darwin-x64 --outfile binaries/ccusage-macos-x64
+          
+          # Build macOS arm64 binary (cross-compile from Linux)
+          echo "Building macOS arm64 binary..."
+          bun build ./dist/index.js --compile --target=bun-darwin-arm64 --outfile binaries/ccusage-macos-arm64
+          
+          # Make binaries executable
+          chmod +x binaries/ccusage-*
+          
+          # Create compressed archives
+          cd binaries
+          tar -czf ccusage-linux-x64.tar.gz ccusage-linux-x64
+          tar -czf ccusage-macos-x64.tar.gz ccusage-macos-x64
+          tar -czf ccusage-macos-arm64.tar.gz ccusage-macos-arm64
+          cd ..
+          
+          # List generated files
+          echo "Generated binaries:"
+          ls -lh binaries/
+
+      - name: Extract version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release with binaries
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create release notes
+          cat > release_notes.md << EOF
+          ## ccusage v${{ steps.get_version.outputs.version }}
+          
+          ### Installation
+          
+          Download the appropriate binary for your platform:
+          - **Linux x64**: \`ccusage-linux-x64.tar.gz\`
+          - **macOS x64 (Intel)**: \`ccusage-macos-x64.tar.gz\`
+          - **macOS ARM64 (Apple Silicon)**: \`ccusage-macos-arm64.tar.gz\`
+          
+          Extract and run:
+          \`\`\`bash
+          tar -xzf ccusage-<platform>.tar.gz
+          chmod +x ccusage-<platform>
+          ./ccusage-<platform> --help
+          \`\`\`
+          
+          ### What's Changed
+          Please see the [changelog](https://github.com/ryoppippi/ccusage/blob/main/CHANGELOG.md) for details.
+          EOF
+          
+          # Create the release and upload assets
+          gh release create "${{ github.ref_name }}" \
+            --title "Release v${{ steps.get_version.outputs.version }}" \
+            --notes-file release_notes.md \
+            ./binaries/ccusage-linux-x64.tar.gz \
+            ./binaries/ccusage-macos-x64.tar.gz \
+            ./binaries/ccusage-macos-arm64.tar.gz

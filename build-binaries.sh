@@ -25,12 +25,8 @@ bun build ./dist/index.js --compile --target=bun-darwin-x64 --outfile binaries/c
 echo "Building macOS arm64 binary..."
 bun build ./dist/index.js --compile --target=bun-darwin-arm64 --outfile binaries/ccusage-macos-arm64
 
-# Build Windows x64 binary
-echo "Building Windows x64 binary..."
-bun build ./dist/index.js --compile --target=bun-windows-x64 --outfile binaries/ccusage-windows-x64.exe
-
-# Make binaries executable
-chmod +x binaries/ccusage-*
+# Make binaries executable (excluding Windows exe files)
+chmod +x binaries/ccusage-linux-* binaries/ccusage-macos-*
 
 # List generated binaries
 echo ""
