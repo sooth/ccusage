@@ -8,6 +8,7 @@ import { dailyCommand } from './daily.ts';
 import { mcpCommand } from './mcp.ts';
 import { monthlyCommand } from './monthly.ts';
 import { sessionCommand } from './session.ts';
+import { syncCommand } from './sync.ts';
 
 /**
  * Map of available CLI subcommands
@@ -20,6 +21,7 @@ subCommands.set('session', sessionCommand);
 subCommands.set('blocks', blocksCommand);
 subCommands.set('blocks-monitor', blocksMonitorCommand);
 subCommands.set('mcp', mcpCommand);
+subCommands.set('sync', syncCommand);
 
 /**
  * Default command when no subcommand is specified (defaults to daily)

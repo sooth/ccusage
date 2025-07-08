@@ -1,0 +1,28 @@
+[Unit]
+Description=Claude Code Usage Sync Service
+Documentation=https://github.com/ryoppippi/ccusage
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ccusage sync --quiet
+# Service runs as the user who enables it
+Environment="HOME=%h"
+StandardOutput=journal
+StandardError=journal
+
+# Restart configuration for reliability
+Restart=on-failure
+RestartSec=30
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.claude %h/.config/claude
+ReadWritePaths=%h/.ccusage
+
+[Install]
+WantedBy=default.target

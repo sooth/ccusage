@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ccusage.sync</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/dmalson/GitHub/ccusage/binaries/ccusage-macos-arm64</string>
+        <string>sync</string>
+        <string>--quiet</string>
+    </array>
+    
+    <!-- Run every 5 minutes (300 seconds) -->
+    <key>StartInterval</key>
+    <integer>300</integer>
+    
+    <!-- Start after login -->
+    <key>RunAtLoad</key>
+    <true/>
+    
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    
+    <!-- Logging -->
+    <key>StandardOutPath</key>
+    <string>/tmp/ccusage-sync.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/ccusage-sync.error.log</string>
+    
+    <!-- Keep alive only if it crashes -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    
+    <!-- Throttle restart attempts -->
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+</dict>
+</plist>

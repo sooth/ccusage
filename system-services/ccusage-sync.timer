@@ -1,0 +1,18 @@
+[Unit]
+Description=Run Claude Code Usage Sync every 5 minutes
+Documentation=https://github.com/ryoppippi/ccusage
+Requires=ccusage-sync.service
+
+[Timer]
+# Run every 5 minutes
+OnBootSec=1min
+OnUnitActiveSec=5min
+
+# Add some randomization to prevent all instances hitting server at once
+RandomizedDelaySec=30
+
+# Make sure timer persists across reboots
+Persistent=true
+
+[Install]
+WantedBy=timers.target
