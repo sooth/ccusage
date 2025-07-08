@@ -51,6 +51,15 @@ This fork adds powerful new capabilities to ccusage:
 - **Multi-Project Support**: Track multiple Claude projects simultaneously
 - **Responsive Display**: Automatically adjusts to terminal width
 
+### 🔄 Automated Background Sync
+
+- **New `sync` Command**: Submit token usage once and exit - perfect for automation
+- **System Services**: Ready-to-use service files for automatic synchronization:
+  - **Linux**: systemd service + timer for running every 5 minutes
+  - **macOS**: launchd plist for background sync on schedule
+- **Silent Operation**: `--quiet` flag suppresses output for cron/service usage
+- **No Manual Monitoring**: Set it and forget it - your usage data syncs automatically
+
 ### 🎨 Web Dashboard
 
 - **Beautiful Web UI**: Access your usage dashboard at `https://soothaa.pythonanywhere.com/{YOUR_GUID}`
@@ -145,7 +154,33 @@ ccusage backfill --server --verbose  # See detailed progress
 
 # Live monitoring with automatic server sync
 ccusage blocks-monitor      # Syncs every 30 seconds
+
+# Background sync (NEW!)
+ccusage sync               # Submit current usage once and exit
+ccusage sync --quiet       # Silent mode for cron/services
 ```
+
+#### Automated Background Sync
+
+Set up automatic synchronization that runs every 5 minutes:
+
+**macOS:**
+```bash
+# Download and extract the binary
+tar -xzf ccusage-macos-arm64.tar.gz
+
+# Run the installer script
+./install-macos-service.sh
+```
+
+**Linux:**
+```bash
+# Install service files
+sudo cp system-services/ccusage-sync.* /etc/systemd/user/
+systemctl --user enable --now ccusage-sync.timer
+```
+
+See [system-services/README.md](system-services/README.md) for detailed instructions.
 
 #### Privacy & Data
 
@@ -180,6 +215,7 @@ ccusage daily --mode auto         # Smart mode (default)
 - 🌐 **Multi-Host Support**: Aggregate usage data across multiple machines via our hosted server
 - 🎨 **Web Dashboard**: Beautiful web UI at `soothaa.pythonanywhere.com/{GUID}` with real-time updates
 - 📤 **Historical Backfill**: Upload existing local data to server for cross-machine aggregation
+- 🔄 **Automated Sync**: Background synchronization with system service support
 - 🤖 **Model Tracking**: See which Claude models you're using (Opus, Sonnet, etc.)
 - 📊 **Model Breakdown**: View per-model cost breakdown with `--breakdown` flag
 - 📁 **Multi-Directory Support**: Automatically finds Claude data in both `~/.claude` and `~/.config/claude`
