@@ -143,7 +143,7 @@ export function anonymizeProjectName(projectName: string): string {
 	// Match username@domain where domain is any non-whitespace, non-dash characters
 	const emailPattern = new RegExp(`${escapeRegExp(currentUser)}(@[^\\s\\-]+)`, 'gi');
 	const result = projectName.replace(emailPattern, () => {
-		// Replace the domain part with [domain]
+		// Replace the entire email pattern with [user]@[domain]
 		return '[user]@[domain]';
 	});
 
@@ -179,10 +179,11 @@ export function extractAnonymizedProjectPath(filePath: string, baseDir: string):
 
 	// Extract project name (first directory in the relative path)
 	const parts = relativePath.split(separator);
-	const projectName = parts.length > 0 && parts[0] !== '' ? parts[0] : 'Unknown Project';
+	const firstPart = parts[0];
+	const projectName: string = parts.length > 0 && firstPart !== '' && firstPart !== undefined ? firstPart : 'Unknown Project';
 
-	// Anonymize the project name
-	return projectName !== '' ? anonymizeProjectName(projectName) : projectName;
+	// Anonymize the project name - projectName is guaranteed to be a string at this point
+	return projectName !== '' && projectName !== 'Unknown Project' ? anonymizeProjectName(projectName) : projectName;
 }
 
 /**

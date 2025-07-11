@@ -698,6 +698,7 @@ if (import.meta.vitest != null) {
 				},
 				costUSD: 0.03,
 				models: ['claude-sonnet-4-20250514'],
+				modelBreakdowns: [],
 			};
 
 			const result = calculateBurnRate(block);
