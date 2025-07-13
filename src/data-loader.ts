@@ -127,12 +127,19 @@ export function getClaudePaths(): string[] {
 export const usageDataSchema = z.object({
 	timestamp: isoTimestampSchema,
 	version: versionSchema.optional(), // Claude Code version
+	type: z.string().optional(), // Entry type: "assistant", "user", or "summary"
+	userType: z.string().optional(), // User type: "external"
+	sessionId: z.string().optional(), // Session ID at root level
+	parentUuid: z.string().optional(), // Parent message UUID
+	isSidechain: z.boolean().optional(), // Sidechain indicator
+	cwd: z.string().optional(), // Current working directory
 	message: z.object({
 		usage: z.object({
 			input_tokens: z.number(),
 			output_tokens: z.number(),
 			cache_creation_input_tokens: z.number().optional(),
 			cache_read_input_tokens: z.number().optional(),
+			service_tier: z.string().optional(), // New field: "standard"
 		}),
 		model: modelNameSchema.optional(), // Model is inside message object
 		id: messageIdSchema.optional(), // Message ID for deduplication
@@ -140,7 +147,7 @@ export const usageDataSchema = z.object({
 			text: z.string().optional(),
 		})).optional(),
 	}),
-	costUSD: z.number().optional(), // Made optional for new schema
+	costUSD: z.number().optional(), // Made optional for new schema - no longer present
 	requestId: requestIdSchema.optional(), // Request ID for deduplication
 	isApiErrorMessage: z.boolean().optional(),
 });
@@ -731,6 +738,12 @@ export async function loadDailyUsageData(
 				}
 				const data = result.data;
 
+				// Skip non-assistant entries (user, summary, etc.)
+				// Only filter by type if the field exists (for backwards compatibility)
+				if (data.type != null && data.type !== 'assistant') {
+					continue;
+				}
+
 				// Check for duplicate message + request ID combination
 				const uniqueHash = createUniqueHash(data);
 				if (isDuplicateEntry(uniqueHash, processedHashes)) {
@@ -888,6 +901,12 @@ export async function loadSessionData(
 					continue;
 				}
 				const data = result.data;
+
+				// Skip non-assistant entries (user, summary, etc.)
+				// Only filter by type if the field exists (for backwards compatibility)
+				if (data.type != null && data.type !== 'assistant') {
+					continue;
+				}
 
 				// Check for duplicate message + request ID combination
 				const uniqueHash = createUniqueHash(data);
@@ -1144,6 +1163,12 @@ export async function loadSessionBlockData(
 					continue;
 				}
 				const data = result.data;
+
+				// Skip non-assistant entries (user, summary, etc.)
+				// Only filter by type if the field exists (for backwards compatibility)
+				if (data.type != null && data.type !== 'assistant') {
+					continue;
+				}
 
 				// Check for duplicate message + request ID combination
 				const uniqueHash = createUniqueHash(data);
