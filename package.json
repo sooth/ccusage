@@ -1,19 +1,19 @@
 {
 	"name": "ccusage",
-	"type": "module",
 	"version": "18.2.1",
 	"description": "Usage analysis tool for Claude Code",
-	"author": "ryoppippi",
-	"license": "MIT",
-	"funding": "https://github.com/ryoppippi/ccusage?sponsor=1",
 	"homepage": "https://github.com/ryoppippi/ccusage#readme",
+	"bugs": {
+		"url": "https://github.com/ryoppippi/ccusage/issues"
+	},
 	"repository": {
 		"type": "git",
 		"url": "git+https://github.com/ryoppippi/ccusage.git"
 	},
-	"bugs": {
-		"url": "https://github.com/ryoppippi/ccusage/issues"
-	},
+	"funding": "https://github.com/ryoppippi/ccusage?sponsor=1",
+	"license": "MIT",
+	"author": "ryoppippi",
+	"type": "module",
 	"exports": {
 		".": "./dist/index.js",
 		"./calculate-cost": "./dist/calculate-cost.js",
@@ -35,9 +35,6 @@
 		".",
 		"docs"
 	],
-	"engines": {
-		"node": ">=20.19.3"
-	},
 	"scripts": {
 		"build": "tsdown",
 		"docs:build": "cd docs && bun run build",
@@ -53,6 +50,20 @@
 		"start": "bun run ./src/index.ts",
 		"test": "vitest",
 		"typecheck": "tsgo --noEmit"
+	},
+	"simple-git-hooks": {
+		"pre-commit": "bun lint-staged"
+	},
+	"lint-staged": {
+		"*": [
+			"eslint --cache --fix"
+		],
+		"package.json": [
+			"sort-package-json"
+		]
+	},
+	"overrides": {
+		"vite": "npm:rolldown-vite@latest"
 	},
 	"devDependencies": {
 		"@antfu/utils": "^9.2.0",
@@ -98,19 +109,8 @@
 		"xdg-basedir": "^5.1.0",
 		"zod": "^3.25.67"
 	},
-	"overrides": {
-		"vite": "npm:rolldown-vite@latest"
-	},
-	"simple-git-hooks": {
-		"pre-commit": "bun lint-staged"
-	},
-	"lint-staged": {
-		"*": [
-			"eslint --cache --fix"
-		],
-		"package.json": [
-			"sort-package-json"
-		]
+	"engines": {
+		"node": ">=20.19.3"
 	},
 	"trustedDependencies": [
 		"simple-git-hooks"
