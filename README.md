@@ -165,6 +165,7 @@ ccusage sync --quiet       # Silent mode for cron/services
 Set up automatic synchronization that runs every 5 minutes:
 
 **macOS:**
+
 ```bash
 # Download and extract the binary
 tar -xzf ccusage-macos-arm64.tar.gz
@@ -174,6 +175,7 @@ tar -xzf ccusage-macos-arm64.tar.gz
 ```
 
 **Linux:**
+
 ```bash
 # Install service files
 sudo cp system-services/ccusage-sync.* /etc/systemd/user/

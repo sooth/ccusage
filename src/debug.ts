@@ -24,7 +24,7 @@ type Discrepancy = {
 	file: string;
 	timestamp: string;
 	model: string;
-	originalCost: number;
+	originalCost: number | null;
 	calculatedCost: number;
 	difference: number;
 	percentDiff: number;
@@ -130,9 +130,9 @@ export async function detectMismatches(
 			const data = schemaResult.data;
 			stats.totalEntries++;
 
-			// Check if we have both costUSD and model
+			// Check if we have both costUSD and model (and costUSD is not null)
 			if (
-				data.costUSD !== undefined
+				data.costUSD != null
 				&& data.message.model != null
 				&& data.message.model !== '<synthetic>'
 			) {
@@ -296,7 +296,7 @@ export function printMismatchReport(
 			logger.info(`File: ${disc.file}`);
 			logger.info(`Timestamp: ${disc.timestamp}`);
 			logger.info(`Model: ${disc.model}`);
-			logger.info(`Original cost: $${disc.originalCost.toFixed(6)}`);
+			logger.info(`Original cost: $${disc.originalCost?.toFixed(6) ?? 'null'}`);
 			logger.info(`Calculated cost: $${disc.calculatedCost.toFixed(6)}`);
 			logger.info(
 				`Difference: $${disc.difference.toFixed(6)} (${disc.percentDiff.toFixed(2)}%)`,

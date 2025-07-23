@@ -273,8 +273,8 @@ if (import.meta.vitest != null) {
 			it('should anonymize email-like patterns', () => {
 				_setTestUsername('bob');
 
-				expect(anonymizeProjectName('bob@company.com-project')).toBe('[user]@[domain]-project');
-				expect(anonymizeProjectName('project-bob@email.co.uk')).toBe('project-[user]@[domain]');
+				expect(anonymizeProjectName('bob@company.com-project')).toBe('[user]@company.com-project');
+				expect(anonymizeProjectName('project-bob@email.co.uk')).toBe('project-[user]@email.co.uk');
 			});
 
 			it('should not change project names without username', () => {

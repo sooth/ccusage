@@ -25,29 +25,6 @@ function floorToSessionBoundary(timestamp: Date): Date {
 const floorToHour = floorToSessionBoundary;
 
 /**
- * Calculate the next Claude session boundary (0, 5, 10, 15, 20 UTC)
- * @param timestamp - The timestamp to calculate from
- * @returns New Date object at the next session boundary
- */
-function getNextSessionBoundary(timestamp: Date): Date {
-	const next = new Date(timestamp);
-	const hour = next.getUTCHours();
-	// Get next 5-hour boundary
-	const nextBoundaryHour = Math.ceil((hour + 1) / 5) * 5;
-
-	if (nextBoundaryHour >= 24) {
-		// Move to next day
-		next.setUTCDate(next.getUTCDate() + 1);
-		next.setUTCHours(nextBoundaryHour % 24, 0, 0, 0);
-	}
-	else {
-		next.setUTCHours(nextBoundaryHour, 0, 0, 0);
-	}
-
-	return next;
-}
-
-/**
  * Represents a single usage data entry loaded from JSONL files
  */
 export type LoadedUsageEntry = {
@@ -206,8 +183,8 @@ export function identifySessionBlocks(
  * @returns Session block with aggregated data
  */
 function createBlock(startTime: Date, entries: LoadedUsageEntry[], now: Date, sessionDurationMs: number): SessionBlock {
-	// Calculate end time based on Claude's session boundaries
-	const endTime = getNextSessionBoundary(startTime);
+	// Calculate end time based on session duration
+	const endTime = new Date(startTime.getTime() + sessionDurationMs);
 	const lastEntry = entries[entries.length - 1];
 	const actualEndTime = lastEntry != null ? lastEntry.timestamp : startTime;
 	const isActive = now.getTime() - actualEndTime.getTime() < sessionDurationMs && now < endTime;
